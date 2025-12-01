@@ -138,17 +138,26 @@ export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
 
       // Sucesso!
       const evento = data.evento;
-      const dataFormatada = new Date(evento.data).toLocaleDateString('pt-BR', {
+      const dataEvento = new Date(evento.data);
+      const dataFormatada = dataEvento.toLocaleDateString('pt-BR', {
         day: '2-digit',
-        month: 'long',
+        month: '2-digit',
         year: 'numeric'
       });
 
+      // Extrair hora se existir
+      let mensagem = `✅ Anotado!\n📌 ${evento.titulo}\n📅 ${dataFormatada}`;
+      
+      // Verificar se há hora no timestamp
+      const horaMatch = evento.data.match(/T(\d{2}:\d{2})/);
+      if (horaMatch && horaMatch[1] !== '12:00') {
+        mensagem += ` às ${horaMatch[1]}`;
+      }
+      
+      mensagem += '\n🔔 Vou te lembrar!';
+
       setButtonState("success");
-      toast.success(
-        `✅ Anotado!\n📌 ${evento.titulo}\n📅 ${dataFormatada}\n🔔 Vou te lembrar!`,
-        { duration: 5000 }
-      );
+      toast.success(mensagem, { duration: 5000 });
 
       // Limpar campos após 2 segundos
       setTimeout(() => {
