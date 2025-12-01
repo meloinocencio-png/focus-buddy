@@ -84,7 +84,8 @@ const Index = () => {
               <Settings className="h-5 w-5" />
             </Button>
 
-            <Button
+            {/* Botão de notificações temporariamente desabilitado para debug */}
+            {/* <Button
               variant="ghost"
               size="icon"
               onClick={() => setNotificacoesOpen(true)}
@@ -99,7 +100,7 @@ const Index = () => {
                   {notificacoesCount}
                 </Badge>
               )}
-            </Button>
+            </Button> */}
 
             <Button
               variant="ghost"
@@ -123,7 +124,8 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-12">
-        <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} />
+        {/* Notificações temporariamente desabilitadas para debug */}
+        {/* <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} /> */}
 
         <section className="text-center space-y-6">
           <div>
@@ -146,11 +148,12 @@ const Index = () => {
         </section>
       </main>
 
-      <CentroNotificacoes
+      {/* Centro de notificações temporariamente desabilitado para debug */}
+      {/* <CentroNotificacoes
         open={notificacoesOpen}
         onOpenChange={setNotificacoesOpen}
         onCountChange={setNotificacoesCount}
-      />
+      /> */}
     </div>
   );
 };

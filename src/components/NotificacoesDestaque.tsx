@@ -27,17 +27,23 @@ const tipoConfig: Record<string, { cor: string; emoji: string }> = {
 
 export const NotificacoesDestaque = ({ onVerTodas }: NotificacoesDestaqueProps) => {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchNotificacoes = async () => {
-      const { data } = await supabase
-        .from("notificacoes")
-        .select("*")
-        .eq("lida", false)
-        .order("criada_em", { ascending: false })
-        .limit(3);
+      try {
+        setLoading(true);
+        const { data } = await supabase
+          .from("notificacoes")
+          .select("*")
+          .eq("lida", false)
+          .order("criada_em", { ascending: false })
+          .limit(3);
 
-      setNotificacoes((data as Notificacao[]) || []);
+        setNotificacoes((data as Notificacao[]) || []);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchNotificacoes();
@@ -63,7 +69,7 @@ export const NotificacoesDestaque = ({ onVerTodas }: NotificacoesDestaqueProps) 
     };
   }, []);
 
-  if (notificacoes.length === 0) {
+  if (loading || notificacoes.length === 0) {
     return null;
   }
 
