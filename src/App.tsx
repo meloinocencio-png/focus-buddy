@@ -8,7 +8,14 @@ import Auth from "./pages/Auth";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Initialize query client with default options
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
