@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { parseUTCDate } from "@/utils/dateUtils";
 
 interface Evento {
   id: string;
@@ -56,7 +57,7 @@ export const EditEventDialog = ({
 
   useEffect(() => {
     if (evento) {
-      const dataEvento = new Date(evento.data);
+      const dataEvento = parseUTCDate(evento.data);
       const dataFormatada = dataEvento.toISOString().split("T")[0];
       const horaFormatada = dataEvento.toTimeString().slice(0, 5);
 
