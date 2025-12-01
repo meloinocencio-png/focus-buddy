@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Mic, MicOff, Loader2 } from "lucide-react";
+import { Mic, MicOff, Loader2, Send } from "lucide-react";
 import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -40,6 +41,13 @@ export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [transcript, setTranscript] = useState("");
+  const [textInput, setTextInput] = useState("");
+
+  const examples = [
+    "Aniversário do João dia 15/03",
+    "Comprar remédio amanhã",
+    "Consulta dentista próxima sexta 10h"
+  ];
 
   useEffect(() => {
     // Verificar se o navegador suporta Web Speech API
@@ -130,6 +138,7 @@ export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
       );
 
       setTranscript("");
+      setTextInput("");
       onEventCreated();
       
     } catch (error) {
@@ -138,6 +147,23 @@ export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleTextSubmit = () => {
+    if (textInput.trim()) {
+      processarComando(textInput);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      handleTextSubmit();
+    }
+  };
+
+  const handleExampleClick = (example: string) => {
+    setTextInput(example);
   };
 
   const toggleListening = () => {
@@ -162,54 +188,121 @@ export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
     }
   };
 
+  const charCount = textInput.length;
+  const maxChars = 200;
+
   return (
-    <div className="flex flex-col items-center gap-4">
-      <Button
-        onClick={toggleListening}
-        size="lg"
-        disabled={isProcessing}
-        className={`
-          h-32 w-32 rounded-full text-5xl transition-all duration-300 ease-out
-          ${isProcessing
-            ? 'bg-muted cursor-not-allowed'
-            : isListening 
-              ? 'bg-destructive hover:bg-destructive/90 animate-pulse scale-110' 
-              : 'bg-voice-button hover:bg-voice-hover scale-100'
-          }
-        `}
-      >
-        {isProcessing ? (
-          <Loader2 className="animate-spin" />
-        ) : isListening ? (
-          <MicOff />
-        ) : (
-          <Mic />
-        )}
-      </Button>
-      
-      <div className="text-center">
-        <p className="text-lg font-medium text-foreground">
-          {isProcessing 
-            ? "🤖 Entendendo..." 
-            : isListening 
-              ? "🎤 Escutando..." 
-              : "Toque para falar"}
-        </p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {isProcessing 
-            ? "Processando seu comando..."
-            : isListening 
-              ? "Diga seu compromisso naturalmente" 
-              : "Exemplo: 'Aniversário da Maria dia 25'"}
-        </p>
+    <div className="flex flex-col items-center gap-8 w-full max-w-4xl mx-auto">
+      {/* Voice and Text Input Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-[auto_auto_1fr] gap-6 items-start w-full">
+        {/* Voice Button */}
+        <div className="flex flex-col items-center gap-3">
+          <Button
+            onClick={toggleListening}
+            size="lg"
+            disabled={isProcessing}
+            className={`
+              h-24 w-24 rounded-full text-2xl transition-all duration-300 ease-out shadow-lg hover:shadow-xl
+              ${isProcessing
+                ? 'bg-muted cursor-not-allowed'
+                : isListening 
+                  ? 'bg-destructive hover:bg-destructive/90 animate-pulse scale-110' 
+                  : 'bg-[hsl(var(--voice-button))] hover:bg-[hsl(var(--voice-button-hover))] scale-100'
+              }
+            `}
+          >
+            {isProcessing ? (
+              <Loader2 className="h-12 w-12 animate-spin" />
+            ) : isListening ? (
+              <MicOff className="h-12 w-12" />
+            ) : (
+              <Mic className="h-12 w-12" />
+            )}
+          </Button>
+          <span className="text-sm text-muted-foreground font-medium">
+            {isListening ? "🎤 Escutando..." : "Falar"}
+          </span>
+        </div>
+
+        {/* Separator - Desktop */}
+        <div className="hidden md:flex items-center justify-center self-center px-4">
+          <span className="text-muted-foreground font-medium">ou</span>
+        </div>
+
+        {/* Separator - Mobile */}
+        <div className="flex md:hidden items-center justify-center gap-3 my-2">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-muted-foreground font-medium">ou</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        {/* Text Input */}
+        <div className="flex flex-col gap-3 flex-1 w-full">
+          <div className="relative">
+            <div className="absolute left-4 top-4 text-2xl pointer-events-none">✏️</div>
+            <Textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value.slice(0, maxChars))}
+              onKeyDown={handleKeyDown}
+              placeholder="Ou digite aqui: 'Aniversário da Maria dia 25' ou 'Consulta amanhã 14h'"
+              disabled={isProcessing}
+              className="min-h-[80px] text-lg pl-12 pr-4 py-4 resize-none border-2 focus:border-primary transition-colors"
+            />
+            <div className="absolute right-3 bottom-3 text-xs text-muted-foreground">
+              {charCount}/{maxChars}
+            </div>
+          </div>
+          
+          <Button
+            onClick={handleTextSubmit}
+            disabled={isProcessing || !textInput.trim()}
+            size="lg"
+            className="w-full md:w-auto md:self-end gap-2"
+          >
+            <Send className="h-5 w-5" />
+            Adicionar
+          </Button>
+
+          <div className="text-xs text-muted-foreground text-center md:text-right">
+            Dica: Ctrl + Enter para enviar rápido
+          </div>
+        </div>
       </div>
 
+      {/* Voice Transcript Display */}
       {transcript && !isProcessing && (
-        <div className="mt-4 p-4 bg-card rounded-lg border-2 border-primary/20 max-w-2xl">
+        <div className="w-full p-4 bg-card border-2 border-primary/20 rounded-lg">
           <p className="text-sm text-muted-foreground mb-1">Você disse:</p>
           <p className="text-lg text-foreground">{transcript}</p>
         </div>
       )}
+
+      {/* Processing State */}
+      {isProcessing && (
+        <div className="flex items-center gap-3 text-primary">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-lg font-medium">🤖 Entendendo...</span>
+        </div>
+      )}
+
+      {/* Examples */}
+      <div className="w-full">
+        <p className="text-sm text-muted-foreground mb-3 text-center">
+          👋 Experimente dizer ou escrever:
+        </p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {examples.map((example, index) => (
+            <button
+              key={index}
+              onClick={() => handleExampleClick(example)}
+              disabled={isProcessing}
+              className="px-4 py-2 text-sm bg-muted hover:bg-accent text-foreground rounded-lg transition-colors border border-border hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
