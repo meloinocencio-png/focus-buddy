@@ -1,1 +1,4 @@
 project_id = "hbxuqtpybdenqcbwxhka"
+
+[functions.processar-comando]
+verify_jwt = false

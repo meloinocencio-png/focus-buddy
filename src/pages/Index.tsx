@@ -10,7 +10,6 @@ import { toast } from "sonner";
 const Index = () => {
   const [user, setUser] = useState<any>(null);
   const [session, setSession] = useState<any>(null);
-  const [transcript, setTranscript] = useState("");
   const [isDark, setIsDark] = useState(false);
   const navigate = useNavigate();
 
@@ -53,10 +52,9 @@ const Index = () => {
     navigate("/auth");
   };
 
-  const handleTranscript = (text: string) => {
-    setTranscript(text);
-    // TODO: Processar transcrição e criar evento automaticamente
-    console.log("Transcrição:", text);
+  const handleEventCreated = () => {
+    // Recarregar eventos no dashboard
+    window.location.reload();
   };
 
   if (!user) {
@@ -104,14 +102,7 @@ const Index = () => {
             </p>
           </div>
           
-          <VoiceRecorder onTranscript={handleTranscript} />
-          
-          {transcript && (
-            <div className="mt-6 p-4 bg-card rounded-lg border-2 border-primary/20 max-w-2xl mx-auto">
-              <p className="text-sm text-muted-foreground mb-1">Você disse:</p>
-              <p className="text-lg text-foreground">{transcript}</p>
-            </div>
-          )}
+          <VoiceRecorder onEventCreated={handleEventCreated} />
         </section>
 
         <section>
