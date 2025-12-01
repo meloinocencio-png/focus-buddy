@@ -57,6 +57,25 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        voice: {
+          button: "hsl(var(--voice-button))",
+          hover: "hsl(var(--voice-button-hover))",
+        },
+        success: {
+          soft: "hsl(var(--success-soft))",
+        },
+        info: {
+          soft: "hsl(var(--info-soft))",
+        },
+        warning: {
+          soft: "hsl(var(--warning-soft))",
+        },
+        category: {
+          birthday: "hsl(var(--category-birthday))",
+          health: "hsl(var(--category-health))",
+          appointment: "hsl(var(--category-appointment))",
+          task: "hsl(var(--category-task))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
