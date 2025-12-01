@@ -97,7 +97,13 @@ export const Dashboard = () => {
     });
   });
 
-  const aniversarios = eventos.filter((e) => e.tipo === "aniversario");
+  const eventosProximos30 = eventos.filter((e) => {
+    const dataEvento = parseUTCDate(e.data);
+    return isWithinInterval(dataEvento, {
+      start: addDays(startOfDay(new Date()), 8),
+      end: addDays(startOfDay(new Date()), 30),
+    });
+  });
 
   if (loading) {
     return (
@@ -120,8 +126,8 @@ export const Dashboard = () => {
             <TabsTrigger value="proximos" className="text-base">
               Próximos 7 dias {eventosProximos.length > 0 && `(${eventosProximos.length})`}
             </TabsTrigger>
-            <TabsTrigger value="aniversarios" className="text-base">
-              🎂 Aniversários {aniversarios.length > 0 && `(${aniversarios.length})`}
+            <TabsTrigger value="proximos30" className="text-base">
+              📅 Próximos 30 dias {eventosProximos30.length > 0 && `(${eventosProximos30.length})`}
             </TabsTrigger>
           </TabsList>
 
@@ -170,13 +176,13 @@ export const Dashboard = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="aniversarios" className="space-y-4 mt-0">
-            {aniversarios.length === 0 ? (
+          <TabsContent value="proximos30" className="space-y-4 mt-0">
+            {eventosProximos30.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                <p className="text-lg">Nenhum aniversário cadastrado</p>
+                <p className="text-lg">Nenhum evento nos próximos 30 dias</p>
               </div>
             ) : (
-              aniversarios.map((evento) => (
+              eventosProximos30.map((evento) => (
                 <EventCard
                   key={evento.id}
                   id={evento.id}
