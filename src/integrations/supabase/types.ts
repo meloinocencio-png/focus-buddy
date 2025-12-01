@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      configuracao_lembretes: {
+        Row: {
+          atualizado_em: string | null
+          criado_em: string | null
+          hora_lembrete_diario: string
+          id: string
+          notificacoes_ativas: boolean
+          usuario_id: string
+          whatsapp: string | null
+        }
+        Insert: {
+          atualizado_em?: string | null
+          criado_em?: string | null
+          hora_lembrete_diario?: string
+          id?: string
+          notificacoes_ativas?: boolean
+          usuario_id: string
+          whatsapp?: string | null
+        }
+        Update: {
+          atualizado_em?: string | null
+          criado_em?: string | null
+          hora_lembrete_diario?: string
+          id?: string
+          notificacoes_ativas?: boolean
+          usuario_id?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
       eventos: {
         Row: {
           criado_em: string | null
@@ -72,6 +102,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "lembretes_enviados_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacoes: {
+        Row: {
+          criada_em: string | null
+          evento_id: string | null
+          id: string
+          lida: boolean
+          mensagem: string
+          tipo: string
+          usuario_id: string
+        }
+        Insert: {
+          criada_em?: string | null
+          evento_id?: string | null
+          id?: string
+          lida?: boolean
+          mensagem: string
+          tipo: string
+          usuario_id: string
+        }
+        Update: {
+          criada_em?: string | null
+          evento_id?: string | null
+          id?: string
+          lida?: boolean
+          mensagem?: string
+          tipo?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_evento_id_fkey"
             columns: ["evento_id"]
             isOneToOne: false
             referencedRelation: "eventos"
