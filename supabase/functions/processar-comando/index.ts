@@ -47,9 +47,9 @@ serve(async (req) => {
     const dataAtual = new Date().toISOString().split('T')[0];
     
     const systemPrompt = `Você extrai informações de comandos de voz em português brasileiro para criar lembretes.
-Retorne APENAS JSON válido, sem texto adicional.
+Retorne APENAS um objeto JSON válido, sem blocos de código markdown, sem texto adicional, sem explicações.
 
-Formato:
+Formato exato:
 {
   "tipo": "aniversario|compromisso|tarefa|saude",
   "titulo": "título curto e claro",
@@ -66,7 +66,9 @@ Exemplos:
 - 'comprar remédio daqui 3 dias' → tipo: tarefa, data: +3 dias
 
 Se a data for relativa (amanhã, semana que vem), calcule a data absoluta.
-Hoje é ${dataAtual}.`;
+Hoje é ${dataAtual}.
+
+IMPORTANTE: Retorne apenas o JSON, sem markdown, sem \`\`\`json, sem texto extra.`;
 
     // Chamar Claude API
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -99,7 +101,16 @@ Hoje é ${dataAtual}.`;
     console.log('[processar-comando] Resposta Claude:', JSON.stringify(claudeData));
 
     // Extrair o texto da resposta
-    const contentText = claudeData.content[0].text;
+    let contentText = claudeData.content[0].text;
+    
+    // Remover blocos markdown se existirem
+    contentText = contentText.trim();
+    if (contentText.startsWith('```json')) {
+      contentText = contentText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+    } else if (contentText.startsWith('```')) {
+      contentText = contentText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+    }
+    contentText = contentText.trim();
     
     // Parsear JSON da resposta
     let eventoData: EventoExtracted;
