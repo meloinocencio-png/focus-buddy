@@ -4,6 +4,7 @@ import { EventCard } from "./EventCard";
 import { EditEventDialog } from "./EditEventDialog";
 import { format, isToday, isWithinInterval, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { parseUTCDate } from "@/utils/dateUtils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Skeleton } from "./ui/skeleton";
 import {
@@ -86,10 +87,10 @@ export const Dashboard = () => {
     setEditingEvento(null);
   };
 
-  const eventosHoje = eventos.filter((e) => isToday(new Date(e.data)));
+  const eventosHoje = eventos.filter((e) => isToday(parseUTCDate(e.data)));
   
   const eventosProximos = eventos.filter((e) => {
-    const dataEvento = new Date(e.data);
+    const dataEvento = parseUTCDate(e.data);
     return !isToday(dataEvento) && isWithinInterval(dataEvento, {
       start: addDays(startOfDay(new Date()), 1),
       end: addDays(startOfDay(new Date()), 7),
@@ -138,7 +139,7 @@ export const Dashboard = () => {
                   tipo={evento.tipo}
                   titulo={evento.titulo}
                   descricao={evento.descricao || undefined}
-                  data={new Date(evento.data)}
+                  data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
@@ -160,7 +161,7 @@ export const Dashboard = () => {
                   tipo={evento.tipo}
                   titulo={evento.titulo}
                   descricao={evento.descricao || undefined}
-                  data={new Date(evento.data)}
+                  data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
@@ -182,7 +183,7 @@ export const Dashboard = () => {
                   tipo={evento.tipo}
                   titulo={evento.titulo}
                   descricao={evento.descricao || undefined}
-                  data={new Date(evento.data)}
+                  data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
