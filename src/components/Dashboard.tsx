@@ -1,10 +1,22 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { EventCard } from "./EventCard";
+import { EditEventDialog } from "./EditEventDialog";
 import { format, isToday, isWithinInterval, addDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Skeleton } from "./ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
+import { toast } from "sonner";
 
 interface Evento {
   id: string;
@@ -18,6 +30,8 @@ interface Evento {
 export const Dashboard = () => {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEventos();
@@ -37,6 +51,39 @@ export const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (id: string) => {
+    const evento = eventos.find((e) => e.id === id);
+    if (evento) {
+      setEditingEvento(evento);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+
+    try {
+      const { error } = await supabase
+        .from("eventos")
+        .delete()
+        .eq("id", deletingId);
+
+      if (error) throw error;
+
+      toast.success("Evento excluído com sucesso!");
+      fetchEventos();
+    } catch (error) {
+      console.error("Erro ao excluir evento:", error);
+      toast.error("Erro ao excluir evento");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleEditSuccess = () => {
+    fetchEventos();
+    setEditingEvento(null);
   };
 
   const eventosHoje = eventos.filter((e) => isToday(new Date(e.data)));
@@ -62,78 +109,118 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <Tabs defaultValue="hoje" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="hoje" className="text-base">
-            Hoje {eventosHoje.length > 0 && `(${eventosHoje.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="proximos" className="text-base">
-            Próximos 7 dias {eventosProximos.length > 0 && `(${eventosProximos.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="aniversarios" className="text-base">
-            🎂 Aniversários {aniversarios.length > 0 && `(${aniversarios.length})`}
-          </TabsTrigger>
-        </TabsList>
+    <>
+      <div className="w-full max-w-4xl mx-auto">
+        <Tabs defaultValue="hoje" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="hoje" className="text-base">
+              Hoje {eventosHoje.length > 0 && `(${eventosHoje.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="proximos" className="text-base">
+              Próximos 7 dias {eventosProximos.length > 0 && `(${eventosProximos.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="aniversarios" className="text-base">
+              🎂 Aniversários {aniversarios.length > 0 && `(${aniversarios.length})`}
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="hoje" className="space-y-4 mt-0">
-          {eventosHoje.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg">Nenhum compromisso para hoje! 🎉</p>
-              <p className="text-sm mt-2">Use o botão de voz para adicionar um novo evento</p>
-            </div>
-          ) : (
-            eventosHoje.map((evento) => (
-              <EventCard
-                key={evento.id}
-                tipo={evento.tipo}
-                titulo={evento.titulo}
-                descricao={evento.descricao || undefined}
-                data={new Date(evento.data)}
-                pessoa={evento.pessoa || undefined}
-              />
-            ))
-          )}
-        </TabsContent>
+          <TabsContent value="hoje" className="space-y-4 mt-0">
+            {eventosHoje.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-lg">Nenhum compromisso para hoje! 🎉</p>
+                <p className="text-sm mt-2">Use o botão de voz para adicionar um novo evento</p>
+              </div>
+            ) : (
+              eventosHoje.map((evento) => (
+                <EventCard
+                  key={evento.id}
+                  id={evento.id}
+                  tipo={evento.tipo}
+                  titulo={evento.titulo}
+                  descricao={evento.descricao || undefined}
+                  data={new Date(evento.data)}
+                  pessoa={evento.pessoa || undefined}
+                  onEdit={handleEdit}
+                  onDelete={setDeletingId}
+                />
+              ))
+            )}
+          </TabsContent>
 
-        <TabsContent value="proximos" className="space-y-4 mt-0">
-          {eventosProximos.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg">Nenhum evento nos próximos 7 dias</p>
-            </div>
-          ) : (
-            eventosProximos.map((evento) => (
-              <EventCard
-                key={evento.id}
-                tipo={evento.tipo}
-                titulo={evento.titulo}
-                descricao={evento.descricao || undefined}
-                data={new Date(evento.data)}
-                pessoa={evento.pessoa || undefined}
-              />
-            ))
-          )}
-        </TabsContent>
+          <TabsContent value="proximos" className="space-y-4 mt-0">
+            {eventosProximos.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-lg">Nenhum evento nos próximos 7 dias</p>
+              </div>
+            ) : (
+              eventosProximos.map((evento) => (
+                <EventCard
+                  key={evento.id}
+                  id={evento.id}
+                  tipo={evento.tipo}
+                  titulo={evento.titulo}
+                  descricao={evento.descricao || undefined}
+                  data={new Date(evento.data)}
+                  pessoa={evento.pessoa || undefined}
+                  onEdit={handleEdit}
+                  onDelete={setDeletingId}
+                />
+              ))
+            )}
+          </TabsContent>
 
-        <TabsContent value="aniversarios" className="space-y-4 mt-0">
-          {aniversarios.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg">Nenhum aniversário cadastrado</p>
-            </div>
-          ) : (
-            aniversarios.map((evento) => (
-              <EventCard
-                key={evento.id}
-                tipo={evento.tipo}
-                titulo={evento.titulo}
-                descricao={evento.descricao || undefined}
-                data={new Date(evento.data)}
-                pessoa={evento.pessoa || undefined}
-              />
-            ))
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
+          <TabsContent value="aniversarios" className="space-y-4 mt-0">
+            {aniversarios.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-lg">Nenhum aniversário cadastrado</p>
+              </div>
+            ) : (
+              aniversarios.map((evento) => (
+                <EventCard
+                  key={evento.id}
+                  id={evento.id}
+                  tipo={evento.tipo}
+                  titulo={evento.titulo}
+                  descricao={evento.descricao || undefined}
+                  data={new Date(evento.data)}
+                  pessoa={evento.pessoa || undefined}
+                  onEdit={handleEdit}
+                  onDelete={setDeletingId}
+                />
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Dialog de edição */}
+      <EditEventDialog
+        evento={editingEvento}
+        open={!!editingEvento}
+        onOpenChange={(open) => !open && setEditingEvento(null)}
+        onSuccess={handleEditSuccess}
+      />
+
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este compromisso? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
