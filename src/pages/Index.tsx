@@ -3,14 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Dashboard } from "@/components/Dashboard";
+import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
+import { CentroNotificacoes } from "@/components/CentroNotificacoes";
 import { Button } from "@/components/ui/button";
-import { LogOut, Moon, Sun } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { LogOut, Moon, Sun, Bell, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 const Index = () => {
   const [user, setUser] = useState<any>(null);
   const [session, setSession] = useState<any>(null);
   const [isDark, setIsDark] = useState(false);
+  const [notificacoesOpen, setNotificacoesOpen] = useState(false);
+  const [notificacoesCount, setNotificacoesCount] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -73,6 +78,32 @@ const Index = () => {
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => navigate("/configuracoes")}
+              className="rounded-full"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setNotificacoesOpen(true)}
+              className="rounded-full relative"
+            >
+              <Bell className="h-5 w-5" />
+              {notificacoesCount > 0 && (
+                <Badge 
+                  variant="destructive" 
+                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {notificacoesCount}
+                </Badge>
+              )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={toggleTheme}
               className="rounded-full"
             >
@@ -92,6 +123,8 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-12">
+        <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} />
+
         <section className="text-center space-y-6">
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-2">
@@ -112,6 +145,12 @@ const Index = () => {
           <Dashboard />
         </section>
       </main>
+
+      <CentroNotificacoes
+        open={notificacoesOpen}
+        onOpenChange={setNotificacoesOpen}
+        onCountChange={setNotificacoesCount}
+      />
     </div>
   );
 };
