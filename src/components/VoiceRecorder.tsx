@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { Mic, MicOff, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VoiceRecorderProps {
-  onTranscript: (text: string) => void;
+  onEventCreated: () => void;
 }
 
 // Adicionar tipagem para Web Speech API
@@ -34,9 +35,11 @@ declare global {
   }
 }
 
-export const VoiceRecorder = ({ onTranscript }: VoiceRecorderProps) => {
+export const VoiceRecorder = ({ onEventCreated }: VoiceRecorderProps) => {
   const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [transcript, setTranscript] = useState("");
 
   useEffect(() => {
     // Verificar se o navegador suporta Web Speech API
@@ -53,12 +56,12 @@ export const VoiceRecorder = ({ onTranscript }: VoiceRecorderProps) => {
     recognitionInstance.lang = 'pt-BR';
 
     recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = Array.from(event.results)
+      const finalTranscript = Array.from(event.results)
         .map((result: any) => result[0])
         .map((result) => result.transcript)
         .join('');
       
-      onTranscript(transcript);
+      setTranscript(finalTranscript);
     };
 
     recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -85,7 +88,57 @@ export const VoiceRecorder = ({ onTranscript }: VoiceRecorderProps) => {
         recognitionInstance.stop();
       }
     };
-  }, [onTranscript]);
+  }, []);
+
+  const processarComando = async (texto: string) => {
+    setIsProcessing(true);
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error("Você precisa estar logado");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('processar-comando', {
+        body: { texto, userId: user.id }
+      });
+
+      if (error) {
+        console.error('Erro ao processar comando:', error);
+        toast.error("Desculpa, não entendi. Pode repetir?");
+        return;
+      }
+
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      // Sucesso!
+      const evento = data.evento;
+      const dataFormatada = new Date(evento.data).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      toast.success(
+        `✅ Anotado!\n📌 ${evento.titulo}\n📅 ${dataFormatada}\n🔔 Vou te lembrar!`,
+        { duration: 5000 }
+      );
+
+      setTranscript("");
+      onEventCreated();
+      
+    } catch (error) {
+      console.error('Erro:', error);
+      toast.error("Erro ao processar. Tente novamente.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const toggleListening = () => {
     if (!recognition) {
@@ -96,8 +149,13 @@ export const VoiceRecorder = ({ onTranscript }: VoiceRecorderProps) => {
     if (isListening) {
       recognition.stop();
       setIsListening(false);
-      toast.success("Gravação pausada");
+      
+      // Processar o comando se houver transcrição
+      if (transcript.trim()) {
+        processarComando(transcript);
+      }
     } else {
+      setTranscript("");
       recognition.start();
       setIsListening(true);
       toast.success("Escutando... Pode falar!");
@@ -109,27 +167,49 @@ export const VoiceRecorder = ({ onTranscript }: VoiceRecorderProps) => {
       <Button
         onClick={toggleListening}
         size="lg"
+        disabled={isProcessing}
         className={`
           h-32 w-32 rounded-full text-5xl transition-all duration-300 ease-out
-          ${isListening 
-            ? 'bg-destructive hover:bg-destructive/90 animate-pulse scale-110' 
-            : 'bg-voice-button hover:bg-voice-hover scale-100'
+          ${isProcessing
+            ? 'bg-muted cursor-not-allowed'
+            : isListening 
+              ? 'bg-destructive hover:bg-destructive/90 animate-pulse scale-110' 
+              : 'bg-voice-button hover:bg-voice-hover scale-100'
           }
         `}
       >
-        {isListening ? <MicOff /> : <Mic />}
+        {isProcessing ? (
+          <Loader2 className="animate-spin" />
+        ) : isListening ? (
+          <MicOff />
+        ) : (
+          <Mic />
+        )}
       </Button>
       
       <div className="text-center">
         <p className="text-lg font-medium text-foreground">
-          {isListening ? "🎤 Escutando..." : "Toque para falar"}
+          {isProcessing 
+            ? "🤖 Entendendo..." 
+            : isListening 
+              ? "🎤 Escutando..." 
+              : "Toque para falar"}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          {isListening 
-            ? "Diga seu compromisso naturalmente" 
-            : "Exemplo: 'Aniversário da Maria dia 25'"}
+          {isProcessing 
+            ? "Processando seu comando..."
+            : isListening 
+              ? "Diga seu compromisso naturalmente" 
+              : "Exemplo: 'Aniversário da Maria dia 25'"}
         </p>
       </div>
+
+      {transcript && !isProcessing && (
+        <div className="mt-4 p-4 bg-card rounded-lg border-2 border-primary/20 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-1">Você disse:</p>
+          <p className="text-lg text-foreground">{transcript}</p>
+        </div>
+      )}
     </div>
   );
 };
