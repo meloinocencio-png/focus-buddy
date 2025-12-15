@@ -29,6 +29,62 @@ serve(async (req) => {
       phone = phone.split('@')[0];
     }
 
+    // Verificar se é mensagem de áudio e transcrever
+    if (payload.audio?.audioUrl && !message) {
+      console.log('🎤 Mensagem de áudio detectada, transcrevendo...');
+      
+      const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+      if (!OPENAI_API_KEY) {
+        console.error('❌ OPENAI_API_KEY não configurada');
+        return new Response(JSON.stringify({ status: 'error', message: 'OpenAI não configurada' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        // Baixar o áudio da URL
+        console.log('📥 Baixando áudio de:', payload.audio.audioUrl);
+        const audioResponse = await fetch(payload.audio.audioUrl);
+        
+        if (!audioResponse.ok) {
+          throw new Error(`Erro ao baixar áudio: ${audioResponse.status}`);
+        }
+
+        const audioBuffer = await audioResponse.arrayBuffer();
+        console.log('📦 Áudio baixado, tamanho:', audioBuffer.byteLength, 'bytes');
+
+        // Criar FormData para enviar ao Whisper
+        const formData = new FormData();
+        const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg' });
+        formData.append('file', audioBlob, 'audio.ogg');
+        formData.append('model', 'whisper-1');
+        formData.append('language', 'pt');
+
+        // Enviar para OpenAI Whisper
+        console.log('🔄 Enviando para Whisper...');
+        const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`
+          },
+          body: formData
+        });
+
+        if (!whisperResponse.ok) {
+          const errorText = await whisperResponse.text();
+          throw new Error(`Erro Whisper: ${whisperResponse.status} - ${errorText}`);
+        }
+
+        const transcript = await whisperResponse.json();
+        message = transcript.text;
+        console.log('✅ Transcrição:', message);
+      } catch (transcribeError) {
+        console.error('❌ Erro na transcrição:', transcribeError);
+        // Continuar mesmo com erro, apenas logando
+        message = null;
+      }
+    }
+
     // Ignorar mensagens vazias, de grupo, ou status updates
     if (!message || payload.isGroup || payload.isStatusReply) {
       console.log('⏭️ Mensagem ignorada (grupo, status ou vazia)');
