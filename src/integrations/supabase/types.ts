@@ -177,6 +177,33 @@ export type Database = {
           },
         ]
       }
+      whatsapp_usuarios: {
+        Row: {
+          ativo: boolean | null
+          criado_em: string | null
+          id: string
+          nome: string | null
+          usuario_id: string
+          whatsapp: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          criado_em?: string | null
+          id?: string
+          nome?: string | null
+          usuario_id: string
+          whatsapp: string
+        }
+        Update: {
+          ativo?: boolean | null
+          criado_em?: string | null
+          id?: string
+          nome?: string | null
+          usuario_id?: string
+          whatsapp?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
