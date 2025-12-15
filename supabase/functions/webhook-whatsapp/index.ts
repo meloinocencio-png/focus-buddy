@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper: buscar usuario_id pelo número de WhatsApp
+async function getUserIdFromWhatsApp(supabase: any, phone: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('whatsapp_usuarios')
+    .select('usuario_id')
+    .eq('whatsapp', phone)
+    .eq('ativo', true)
+    .single();
+  
+  if (error || !data) {
+    return null;
+  }
+  
+  return data.usuario_id;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -93,17 +109,17 @@ serve(async (req) => {
       });
     }
 
-    const WHATSAPP_DESTINO = Deno.env.get('WHATSAPP_DESTINO');
-    
-    // Validar que a mensagem é do número autorizado
-    if (WHATSAPP_DESTINO && phone !== WHATSAPP_DESTINO) {
-      console.log(`⚠️ Mensagem de número não autorizado: ${phone}`);
+    // Buscar usuario_id pelo número de WhatsApp
+    const userId = await getUserIdFromWhatsApp(supabase, phone);
+
+    if (!userId) {
+      console.log(`⛔ WhatsApp não autorizado: ${phone}`);
       return new Response(JSON.stringify({ status: 'unauthorized' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log(`💬 Mensagem de ${phone}: ${message}`);
+    console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}`);
 
     // 1. Buscar contexto das últimas 5 conversas
     const { data: ultimasConversas } = await supabase
@@ -147,7 +163,7 @@ serve(async (req) => {
         data: maluResponse.data,
         pessoa: maluResponse.pessoa,
         lembretes: ['7d', '1d', 'hoje'],
-        usuario_id: null // Será associado depois se necessário
+        usuario_id: userId // ✅ Usando usuario_id da tabela whatsapp_usuarios
       };
 
       // Se tem hora, adicionar ao timestamp
@@ -249,7 +265,8 @@ serve(async (req) => {
         whatsapp_de: phone,
         mensagem_usuario: message,
         mensagem_malu: respostaFinal,
-        contexto: contexto
+        contexto: contexto,
+        usuario_id: userId // ✅ Associar conversa ao usuário
       }]);
 
     if (conversaError) {
