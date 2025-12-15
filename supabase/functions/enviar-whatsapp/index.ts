@@ -16,8 +16,9 @@ serve(async (req) => {
 
     const ZAPI_INSTANCE_ID = Deno.env.get('ZAPI_INSTANCE_ID');
     const ZAPI_TOKEN = Deno.env.get('ZAPI_TOKEN');
+    const ZAPI_CLIENT_TOKEN = Deno.env.get('ZAPI_CLIENT_TOKEN');
 
-    if (!ZAPI_INSTANCE_ID || !ZAPI_TOKEN) {
+    if (!ZAPI_INSTANCE_ID || !ZAPI_TOKEN || !ZAPI_CLIENT_TOKEN) {
       console.error('Variáveis Z-API não configuradas');
       throw new Error('Configuração Z-API ausente');
     }
@@ -32,7 +33,10 @@ serve(async (req) => {
       `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Client-Token': ZAPI_CLIENT_TOKEN
+        },
         body: JSON.stringify({
           phone: phone,
           message: message
