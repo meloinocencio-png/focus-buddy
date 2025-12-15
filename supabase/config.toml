@@ -2,3 +2,12 @@ project_id = "hbxuqtpybdenqcbwxhka"
 
 [functions.processar-comando]
 verify_jwt = false
+
+[functions.enviar-whatsapp]
+verify_jwt = false
+
+[functions.processar-conversa-malu]
+verify_jwt = false
+
+[functions.webhook-whatsapp]
+verify_jwt = false

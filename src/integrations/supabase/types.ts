@@ -44,6 +44,36 @@ export type Database = {
         }
         Relationships: []
       }
+      conversas: {
+        Row: {
+          contexto: Json | null
+          criada_em: string | null
+          id: string
+          mensagem_malu: string
+          mensagem_usuario: string
+          usuario_id: string | null
+          whatsapp_de: string
+        }
+        Insert: {
+          contexto?: Json | null
+          criada_em?: string | null
+          id?: string
+          mensagem_malu: string
+          mensagem_usuario: string
+          usuario_id?: string | null
+          whatsapp_de: string
+        }
+        Update: {
+          contexto?: Json | null
+          criada_em?: string | null
+          id?: string
+          mensagem_malu?: string
+          mensagem_usuario?: string
+          usuario_id?: string | null
+          whatsapp_de?: string
+        }
+        Relationships: []
+      }
       eventos: {
         Row: {
           criado_em: string | null
