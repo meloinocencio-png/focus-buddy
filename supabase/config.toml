@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.webhook-whatsapp]
 verify_jwt = false
+
+[functions.verificar-lembretes]
+verify_jwt = false
+
+[functions.bom-dia]
+verify_jwt = false
+
+[functions.resumo-semanal]
+verify_jwt = false
