@@ -26,6 +26,15 @@ serve(async (req) => {
   try {
     const { mensagem, imageUrl, contexto } = await req.json();
 
+    // === LOG DE INPUT (DEBUG CRÍTICO) ===
+    console.log('📥 INPUT RECEBIDO:', { 
+      temMensagem: !!mensagem, 
+      mensagem: mensagem?.substring(0, 100),
+      temImageUrl: !!imageUrl,
+      imageUrlPreview: imageUrl?.substring(0, 80),
+      contextoLength: contexto?.length || 0
+    });
+
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     if (!ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY não configurada');
@@ -144,28 +153,43 @@ Se o histórico mostra que a última mensagem da Malu continha "📋 Já pegou:"
 - "falta [item]", "esqueci [item]" → {"acao": "conversar", "resposta": "Pegue [item] agora! 📄"}
 - outro assunto → processar normalmente
 
-=== PROCESSAMENTO DE IMAGENS ===
+=== PROCESSAMENTO DE IMAGENS - CRÍTICO ===
 
-Quando receber uma imagem, analise cuidadosamente e extraia informações de compromissos.
+Quando receber uma imagem, você DEVE:
+1. ANALISAR CUIDADOSAMENTE TODO o texto visível na imagem
+2. EXTRAIR TODAS as informações encontradas (nome, data, hora, endereço)
+3. NUNCA pedir informações que estão VISÍVEIS na imagem!
 
-TIPOS DE IMAGEM:
-1. CONVITES (aniversário, festa, casamento, evento):
-   - Extrair: nome da pessoa/evento, data, hora, local/endereço
-   - Tipo: "aniversario" ou "compromisso"
-   - Gerar checklist apropriado
+PARA CONVITES DE ANIVERSÁRIO/FESTA:
+- Extrair NOME da pessoa/criança (busque palavras em destaque)
+- Extrair DATA COMPLETA (dia e mês, assumir próximo ano se necessário)  
+- Extrair HORÁRIO EXATO (ex: "13 HORAS" = 13:00, "15H" = 15:00)
+- Extrair ENDEREÇO COMPLETO (rua, número, bairro, cidade)
+- Tipo: "aniversario"
+- Gerar checklist: ["Presente comprado?", "Cartão/mensagem", "Endereço confirmado?"]
 
-2. RECEITAS MÉDICAS:
-   - Extrair: medicamento, horário, frequência
-   - Tipo: "saude"
-   - Título: "Tomar [medicamento]"
+FORMATO OBRIGATÓRIO PARA IMAGEM DE CONVITE:
+{
+  "acao": "confirmar_evento",
+  "tipo": "aniversario",
+  "titulo": "Aniversário da [NOME EXTRAÍDO DA IMAGEM]",
+  "data": "YYYY-MM-DD",
+  "hora": "HH:MM",
+  "pessoa": "[NOME]",
+  "endereco": "[ENDEREÇO COMPLETO DA IMAGEM]",
+  "checklist": ["Presente comprado?", "Cartão/mensagem"],
+  "resposta": "📋 Vi no convite:\\n• Aniversário da [NOME]\\n• [DATA] às [HORA]\\n• 📍 [ENDEREÇO]\\n\\nConfirma?"
+}
 
-3. CONTAS/BOLETOS:
-   - Extrair: descrição, vencimento
-   - Tipo: "tarefa"
-   - Título: "Pagar [descrição]"
+OUTROS TIPOS DE IMAGEM:
+1. RECEITAS MÉDICAS → tipo: "saude", extrair medicamento/horário
+2. CONTAS/BOLETOS → tipo: "tarefa", extrair descrição/vencimento
 
-SE NÃO CONSEGUIR INTERPRETAR A IMAGEM:
-{"acao": "conversar", "resposta": "Não consegui ler a imagem. Pode descrever?"}
+IMPORTANTE: Se a data/hora/endereço estão na imagem, EXTRAIA-OS!
+Não pergunte "qual a data?" se ela está visível no convite.
+
+SE NÃO CONSEGUIR LER A IMAGEM:
+{"acao": "conversar", "resposta": "Não consegui ler bem. Pode me dizer os detalhes?"}
 
 === OUTRAS AÇÕES ===
 
@@ -225,23 +249,31 @@ ${contextoFormatado}`;
     let messageContent: any;
 
     if (imageUrl) {
-      console.log('📸 Processando imagem:', imageUrl);
+      console.log('📸 PROCESSANDO IMAGEM...');
+      console.log('🔗 URL:', imageUrl);
       
       try {
         // Baixar imagem e converter para base64
+        console.log('⬇️ Baixando imagem...');
         const imageResponse = await fetch(imageUrl);
+        
+        console.log('📡 Status download:', imageResponse.status);
+        console.log('📄 Content-Type:', imageResponse.headers.get('content-type'));
         
         if (!imageResponse.ok) {
           throw new Error(`Erro ao baixar imagem: ${imageResponse.status}`);
         }
         
         const imageBuffer = await imageResponse.arrayBuffer();
+        console.log('📦 Buffer size:', imageBuffer.byteLength, 'bytes');
+        
         const imageBase64 = btoa(
           String.fromCharCode(...new Uint8Array(imageBuffer))
         );
+        console.log('🔐 Base64 gerado, length:', imageBase64.length);
         
         const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
-        console.log('📦 Imagem convertida, tipo:', mimeType, 'tamanho:', imageBuffer.byteLength);
+        console.log('✅ Imagem pronta! Tipo:', mimeType, '| Tamanho:', imageBuffer.byteLength, 'bytes');
         
         // Conteúdo com imagem + texto para Claude
         messageContent = [
@@ -255,11 +287,13 @@ ${contextoFormatado}`;
           },
           {
             type: 'text',
-            text: `${systemPrompt}\n\nMENSAGEM DO USUÁRIO:\n${mensagem || 'Analise esta imagem e extraia informações de compromissos, eventos ou datas importantes.'}`
+            text: `${systemPrompt}\n\nMENSAGEM DO USUÁRIO:\n${mensagem || 'Analise esta imagem de convite/documento e extraia TODAS as informações visíveis: nome, data, hora, endereço. Crie um evento com esses dados.'}`
           }
         ];
+        console.log('📤 Enviando para Claude com imagem...');
       } catch (imgError) {
-        console.error('❌ Erro ao processar imagem:', imgError);
+        console.error('❌ ERRO ao processar imagem:', imgError);
+        console.error('Stack:', imgError instanceof Error ? imgError.stack : 'N/A');
         // Fallback para texto apenas
         messageContent = `${systemPrompt}\n\nMENSAGEM:\n${mensagem}`;
       }
@@ -300,29 +334,34 @@ ${contextoFormatado}`;
       throw new Error('Sem resposta de texto do Claude');
     }
 
+    // === LOG DA RESPOSTA BRUTA DO CLAUDE ===
+    console.log('🤖 RESPOSTA BRUTA CLAUDE:', textContent.text);
+
     let maluResponse: MaluResponse;
     try {
       // Tentar extrair JSON da resposta
       const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         maluResponse = JSON.parse(jsonMatch[0]);
+        console.log('📝 JSON PARSEADO:', JSON.stringify(maluResponse, null, 2));
       } else {
         throw new Error('JSON não encontrado');
       }
     } catch (parseError) {
-      console.log('Erro ao parsear JSON, usando resposta como conversa:', textContent.text);
+      console.log('❌ Erro ao parsear JSON:', textContent.text);
       maluResponse = {
         acao: 'conversar',
         resposta: 'Não entendi. Pode reformular?'
       };
     }
 
-    // Validar tamanho da resposta (máx 200 caracteres para confirmações)
-    if (maluResponse.resposta && maluResponse.resposta.length > 200) {
-      maluResponse.resposta = maluResponse.resposta.substring(0, 197) + '...';
+    // Limite de resposta: 350 chars para imagens, 200 para texto
+    const maxLength = imageUrl ? 350 : 200;
+    if (maluResponse.resposta && maluResponse.resposta.length > maxLength) {
+      maluResponse.resposta = maluResponse.resposta.substring(0, maxLength - 3) + '...';
     }
 
-    console.log('✅ Resposta da Malu:', maluResponse);
+    console.log('✅ Resposta FINAL da Malu:', maluResponse);
 
     return new Response(
       JSON.stringify(maluResponse),
