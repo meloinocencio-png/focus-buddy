@@ -341,47 +341,115 @@ serve(async (req) => {
           break;
         case 'todos':
         default:
-          // Buscar próximos 12 meses
-          dataFim.setFullYear(dataFim.getFullYear() + 1);
+          // Máximo 30 dias (evita sobrecarga cognitiva para TDAH)
+          dataFim.setDate(dataFim.getDate() + 30);
           break;
       }
 
       const { data: eventos } = await supabase
         .from('eventos')
         .select('*')
-        .eq('usuario_id', userId)  // ✅ CRÍTICO: Filtrar por usuário!
+        .eq('usuario_id', userId)
         .gte('data', dataInicio.toISOString())
         .lte('data', dataFim.toISOString())
         .order('data', { ascending: true });
 
+      // Funções auxiliares para formatação TDAH-friendly
+      const formatarDiaHeader = (dataStr: string, qtdEventos: number): string => {
+        const data = new Date(dataStr + 'T12:00:00');
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const amanha = new Date(hoje);
+        amanha.setDate(amanha.getDate() + 1);
+        
+        const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const diaSemana = diasSemana[data.getDay()];
+        const diaNum = data.getDate().toString().padStart(2, '0');
+        const mes = (data.getMonth() + 1).toString().padStart(2, '0');
+        const ano = data.getFullYear();
+        
+        const contadorTexto = qtdEventos > 1 ? ` — ${qtdEventos} eventos` : '';
+        
+        // Hoje = URGENTE
+        if (data.toDateString() === hoje.toDateString()) {
+          return `📆 *HOJE (${diaNum}/${mes})* ⚡${contadorTexto}`;
+        }
+        // Amanhã = Próximo
+        if (data.toDateString() === amanha.toDateString()) {
+          return `📆 *Amanhã (${diaNum}/${mes})* 🔔${contadorTexto}`;
+        }
+        // Este ano
+        if (ano === hoje.getFullYear()) {
+          return `📆 *${diaSemana} (${diaNum}/${mes})*${contadorTexto}`;
+        }
+        // Ano diferente
+        return `📆 *${diaNum}/${mes}/${ano}*${contadorTexto}`;
+      };
+
+      const formatarEvento = (evento: any): string => {
+        const dataEvento = new Date(evento.data);
+        const hora = dataEvento.getHours();
+        const minutos = dataEvento.getMinutes();
+        const horaStr = hora > 0 
+          ? `${hora}h${minutos > 0 ? minutos.toString().padStart(2, '0') : ''}`
+          : '';
+        
+        const emoji = evento.tipo === 'aniversario' ? '🎂' : 
+                      evento.tipo === 'saude' ? '💊' :
+                      evento.tipo === 'tarefa' ? '📝' : '📅';
+        
+        let linha = `• ${emoji} ${evento.titulo}`;
+        if (horaStr) linha += ` — ${horaStr}`;
+        
+        // Truncar endereço se muito longo (max 45 chars)
+        if (evento.endereco) {
+          const enderecoTruncado = evento.endereco.length > 45 
+            ? evento.endereco.substring(0, 42) + '...'
+            : evento.endereco;
+          linha += `\n   📍 ${enderecoTruncado}`;
+        }
+        return linha;
+      };
+
       if (eventos && eventos.length > 0) {
-        const listaEventos = eventos.map(e => {
-          const dataEvento = new Date(e.data);
-          const horaStr = dataEvento.getHours() > 0 
-            ? ` às ${dataEvento.getHours()}h${dataEvento.getMinutes() > 0 ? dataEvento.getMinutes() : ''}`
-            : '';
-          const emoji = e.tipo === 'aniversario' ? '🎂' : 
-                       e.tipo === 'saude' ? '💊' :
-                       e.tipo === 'tarefa' ? '📝' : '📅';
-          let item = `• ${emoji} ${e.titulo}${horaStr}`;
-          if (e.endereco) {
-            item += `\n  📍 ${e.endereco}`;
-          }
-          return item;
-        }).join('\n');
-
-        const periodoTexto = maluResponse.periodo === 'hoje' ? 'Hoje' :
-                            maluResponse.periodo === 'amanha' ? 'Amanhã' :
-                            maluResponse.periodo === 'semana' ? 'Essa semana' :
-                            '📅 Sua agenda';
-
-        respostaFinal = `${periodoTexto} você tem:\n${listaEventos}`;
+        // Agrupar eventos por dia
+        const eventosPorDia: Record<string, any[]> = {};
+        eventos.forEach((evento: any) => {
+          const chaveData = new Date(evento.data).toISOString().split('T')[0];
+          if (!eventosPorDia[chaveData]) eventosPorDia[chaveData] = [];
+          eventosPorDia[chaveData].push(evento);
+        });
+        
+        // Ordenar dias e montar blocos
+        const diasOrdenados = Object.keys(eventosPorDia).sort();
+        const blocos = diasOrdenados.map(dia => {
+          const eventosNoDia = eventosPorDia[dia];
+          const header = formatarDiaHeader(dia, eventosNoDia.length);
+          const itens = eventosNoDia.map(formatarEvento).join('\n');
+          return `${header}\n${itens}`;
+        });
+        
+        // Separador visual entre dias
+        const separador = '\n───────────────\n';
+        
+        // Calcular período para footer
+        const diasPeriodo = maluResponse.periodo === 'hoje' ? 1 :
+                            maluResponse.periodo === 'amanha' ? 1 :
+                            maluResponse.periodo === 'semana' ? 7 : 30;
+        
+        // Footer com contador e dica
+        let footer = `\n\n✨ ${eventos.length} evento${eventos.length > 1 ? 's' : ''}`;
+        if (diasPeriodo > 1) footer += ` nos próximos ${diasPeriodo} dias`;
+        if (eventos.length > 5) footer += `\n💡 Use "hoje" ou "semana" para ver menos`;
+        
+        respostaFinal = `📅 *SUA AGENDA*\n\n${blocos.join(separador)}${footer}`;
       } else {
+        // Mensagem vazia com feedback positivo
         const periodoTexto = maluResponse.periodo === 'hoje' ? 'hoje' :
                             maluResponse.periodo === 'amanha' ? 'amanhã' :
                             maluResponse.periodo === 'semana' ? 'essa semana' :
-                            'nos próximos meses';
-        respostaFinal = `Você está livre ${periodoTexto}!`;
+                            'nos próximos 30 dias';
+        respostaFinal = `📅 *SUA AGENDA*\n\nNenhum evento ${periodoTexto}! 🎉\n\n💡 Use voz ou foto para criar.`;
       }
     }
 
