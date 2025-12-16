@@ -8,7 +8,7 @@ const corsHeaders = {
 interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
-        'buscar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
+        'buscar_evento' | 'snooze_lembrete' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -21,6 +21,7 @@ interface MaluResponse {
   busca?: string;        // Para editar/cancelar - palavra-chave do evento
   nova_data?: string;    // Para editar - nova data (YYYY-MM-DD)
   nova_hora?: string;    // Para editar - nova hora (HH:MM)
+  minutos?: number;      // Para snooze - minutos para adiar
 }
 
 serve(async (req) => {
@@ -297,6 +298,36 @@ IMPORTANTE:
 - Extrair palavras-chave relevantes (substantivos, nomes)
 - NÃO incluir: 'quando', 'que', 'dia', 'horas', 'é', 'o', 'a', 'minha', 'meu'
 - Se muito vago ('quando é aquilo?') → pedir mais detalhes
+
+=== SNOOZE DE LEMBRETE (ADIAR) ===
+
+QUANDO USAR:
+Comandos: 'me lembra em X min', 'daqui X minutos', 'me avisa em X', 'adianta X min', 'depois me lembra'
+
+Formato:
+{
+  "acao": "snooze_lembrete",
+  "minutos": número_de_minutos,
+  "resposta": "⏰ Ok! Lembro em X minutos."
+}
+
+EXTRAÇÃO DE TEMPO:
+- 'daqui 15 min' → minutos: 15
+- 'em 30 minutos' → minutos: 30
+- 'me lembra em 1 hora' → minutos: 60
+- 'daqui meia hora' → minutos: 30
+- 'em 5 min' → minutos: 5
+
+LIMITES:
+- Mínimo: 5 minutos
+- Máximo: 180 minutos (3 horas)
+- Se fora do limite → {"acao": "conversar", "resposta": "Use entre 5 e 180 minutos"}
+
+Exemplos:
+- 'me lembra em 15 min' → {"acao": "snooze_lembrete", "minutos": 15}
+- 'daqui 30 minutos' → {"acao": "snooze_lembrete", "minutos": 30}
+- 'em 1 hora' → {"acao": "snooze_lembrete", "minutos": 60}
+- 'meia hora' → {"acao": "snooze_lembrete", "minutos": 30}
 
 DATAS:
 - HOJE: ${dataHoje}

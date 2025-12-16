@@ -1021,6 +1021,104 @@ serve(async (req) => {
         }
       }
     }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: SNOOZE DE LEMBRETE (ADIAR)
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'snooze_lembrete') {
+      console.log('⏰ Snooze solicitado:', maluResponse.minutos, 'minutos');
+      
+      if (!maluResponse.minutos || maluResponse.minutos < 5 || maluResponse.minutos > 180) {
+        respostaFinal = '❌ Use entre 5 e 180 minutos (máx 3h).';
+      } else {
+        // Calcular quando enviar
+        const enviarEm = new Date();
+        enviarEm.setMinutes(enviarEm.getMinutes() + maluResponse.minutos);
+        
+        // ═══════════════════════════════════════════════════════
+        // RECONECTAR COM ÚLTIMO LEMBRETE ENVIADO (últimas 2h)
+        // ═══════════════════════════════════════════════════════
+        let mensagemSnooze = '⏰ Lembrete adiado!';
+        let eventoId = null;
+        
+        // Buscar último lembrete enviado para esse usuário
+        const duasHorasAtras = new Date();
+        duasHorasAtras.setHours(duasHorasAtras.getHours() - 2);
+        
+        const { data: ultimoLembrete } = await supabase
+          .from('lembretes_enviados')
+          .select(`
+            evento_id,
+            tipo_lembrete,
+            enviado_em,
+            eventos!inner(titulo, data, tipo)
+          `)
+          .eq('eventos.usuario_id', userId)
+          .gte('enviado_em', duasHorasAtras.toISOString())
+          .order('enviado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (ultimoLembrete?.eventos) {
+          eventoId = ultimoLembrete.evento_id;
+          const evento = ultimoLembrete.eventos as any;
+          
+          // Calcular tempo restante até o evento
+          const dataEvento = new Date(evento.data);
+          const agora = new Date();
+          const minutosRestantes = Math.ceil((dataEvento.getTime() - agora.getTime()) / (1000 * 60));
+          
+          // Emoji por tipo
+          const emoji = evento.tipo === 'aniversario' ? '🎂' : 
+                        evento.tipo === 'saude' ? '💊' :
+                        evento.tipo === 'tarefa' ? '📝' : '⏰';
+          
+          if (minutosRestantes > 0) {
+            const horasRestantes = Math.floor(minutosRestantes / 60);
+            const minsRestantes = minutosRestantes % 60;
+            
+            let tempoStr = '';
+            if (horasRestantes > 0) {
+              tempoStr = `${horasRestantes}h${minsRestantes > 0 ? minsRestantes.toString().padStart(2, '0') : ''}`;
+            } else {
+              tempoStr = `${minsRestantes}min`;
+            }
+            
+            mensagemSnooze = `${emoji} ${evento.titulo} em ${tempoStr}`;
+          } else {
+            mensagemSnooze = `${emoji} ${evento.titulo}`;
+          }
+          
+          console.log(`✅ Reconectado com evento: ${evento.titulo}`);
+        } else {
+          console.log('⚠️ Nenhum lembrete recente encontrado, criando snooze genérico');
+        }
+        
+        // Criar lembrete snooze
+        const { error: snoozeError } = await supabase
+          .from('lembretes_snooze')
+          .insert([{
+            usuario_id: userId,
+            whatsapp: phone,
+            mensagem: mensagemSnooze,
+            enviar_em: enviarEm.toISOString(),
+            enviado: false,
+            evento_id: eventoId
+          }]);
+        
+        if (snoozeError) {
+          console.error('Erro ao criar snooze:', snoozeError);
+          respostaFinal = '❌ Erro ao agendar lembrete.';
+        } else {
+          const horaSnooze = enviarEm.getHours();
+          const minSnooze = enviarEm.getMinutes();
+          const horaStr = `${horaSnooze}h${minSnooze.toString().padStart(2, '0')}`;
+          
+          console.log(`✅ Snooze criado para ${horaStr}:`, mensagemSnooze);
+          
+          respostaFinal = `✅ Ok! Lembro em ${maluResponse.minutos}min (${horaStr}).`;
+        }
+      }
+    }
 
     // 4. Enviar resposta via WhatsApp
     const enviarResponse = await fetch(

@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.resumo-semanal]
 verify_jwt = false
+
+[functions.processar-snooze]
+verify_jwt = false

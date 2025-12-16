@@ -151,6 +151,47 @@ export type Database = {
           },
         ]
       }
+      lembretes_snooze: {
+        Row: {
+          criado_em: string | null
+          enviado: boolean | null
+          enviar_em: string
+          evento_id: string | null
+          id: string
+          mensagem: string
+          usuario_id: string
+          whatsapp: string
+        }
+        Insert: {
+          criado_em?: string | null
+          enviado?: boolean | null
+          enviar_em: string
+          evento_id?: string | null
+          id?: string
+          mensagem: string
+          usuario_id: string
+          whatsapp: string
+        }
+        Update: {
+          criado_em?: string | null
+          enviado?: boolean | null
+          enviar_em?: string
+          evento_id?: string | null
+          id?: string
+          mensagem?: string
+          usuario_id?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lembretes_snooze_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           criada_em: string | null
