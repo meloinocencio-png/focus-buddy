@@ -45,6 +45,16 @@ serve(async (req) => {
       phone = phone.split('@')[0];
     }
 
+    // Detectar imagem no payload da Z-API
+    let imageUrl: string | null = null;
+    let imageCaption: string | null = null;
+
+    if (payload.image?.imageUrl) {
+      imageUrl = payload.image.imageUrl;
+      imageCaption = payload.image.caption || '';
+      console.log('🖼️ Imagem detectada:', imageUrl);
+    }
+
     // Verificar se é mensagem de áudio e transcrever
     if (payload.audio?.audioUrl && !message) {
       console.log('🎤 Mensagem de áudio detectada, transcrevendo...');
@@ -101,8 +111,13 @@ serve(async (req) => {
       }
     }
 
-    // Ignorar mensagens vazias, de grupo, ou status updates
-    if (!message || payload.isGroup || payload.isStatusReply) {
+    // Se tem imagem mas não tem mensagem de texto, usar caption ou mensagem padrão
+    if (imageUrl && !message) {
+      message = imageCaption || 'Analisar esta imagem';
+    }
+
+    // Ignorar mensagens vazias (sem texto E sem imagem), de grupo, ou status updates
+    if ((!message && !imageUrl) || payload.isGroup || payload.isStatusReply) {
       console.log('⏭️ Mensagem ignorada (grupo, status ou vazia)');
       return new Response(JSON.stringify({ status: 'ignored' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -120,11 +135,14 @@ serve(async (req) => {
     }
 
     // Verificar se já processamos esta mensagem recentemente (últimos 60 segundos)
+    // Para imagens, usar hash da URL como identificador
+    const messageId = imageUrl ? `IMG:${imageUrl.slice(-50)}` : message;
+    
     const { data: mensagemExistente } = await supabase
       .from('conversas')
       .select('id')
       .eq('whatsapp_de', phone)
-      .eq('mensagem_usuario', message)
+      .eq('mensagem_usuario', messageId)
       .gte('criada_em', new Date(Date.now() - 60 * 1000).toISOString())
       .limit(1)
       .maybeSingle();
@@ -136,7 +154,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}`);
+    console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}${imageUrl ? ' [+imagem]' : ''}`);
 
     // 1. Buscar contexto das últimas 5 conversas
     const { data: ultimasConversas } = await supabase
@@ -153,7 +171,7 @@ serve(async (req) => {
 
     console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
 
-    // 2. Processar com a Malu
+    // 2. Processar com a Malu (incluindo imageUrl se houver)
     const processarResponse = await fetch(
       `${supabaseUrl}/functions/v1/processar-conversa-malu`,
       {
@@ -162,7 +180,11 @@ serve(async (req) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${supabaseServiceKey}`
         },
-        body: JSON.stringify({ mensagem: message, contexto })
+        body: JSON.stringify({ 
+          mensagem: message, 
+          imageUrl: imageUrl,
+          contexto 
+        })
       }
     );
 
@@ -215,6 +237,18 @@ serve(async (req) => {
           respostaFinal += '\n📍 Quer adicionar o endereço?';
         }
       }
+    } else if (maluResponse.acao === 'confirmar_evento') {
+      // Apenas envia a mensagem de confirmação, não cria nada ainda
+      // Os dados ficam salvos no contexto da conversa para quando confirmar
+      respostaFinal = maluResponse.resposta || '📋 Confirma? (sim/não)';
+      
+      // Log para debug
+      console.log('⏳ Aguardando confirmação do evento:', {
+        titulo: maluResponse.titulo,
+        data: maluResponse.data,
+        hora: maluResponse.hora,
+        endereco: maluResponse.endereco
+      });
     } else if (maluResponse.acao === 'atualizar_endereco') {
       // Buscar último evento criado do usuário (últimas 24h)
       const { data: ultimoEvento, error: buscarError } = await supabase
@@ -315,12 +349,14 @@ serve(async (req) => {
     const enviarResult = await enviarResponse.json();
     console.log('📤 Resultado envio:', enviarResult);
 
-    // 5. Salvar conversa no banco
+    // 5. Salvar conversa no banco (para imagens, salvar identificador)
+    const mensagemParaSalvar = imageUrl ? `IMG:${imageUrl.slice(-50)}` : message;
+    
     const { error: conversaError } = await supabase
       .from('conversas')
       .insert([{
         whatsapp_de: phone,
-        mensagem_usuario: message,
+        mensagem_usuario: mensagemParaSalvar,
         mensagem_malu: respostaFinal,
         contexto: contexto,
         usuario_id: userId

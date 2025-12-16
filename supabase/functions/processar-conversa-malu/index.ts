@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface MaluResponse {
-  acao: 'criar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
+  acao: 'criar_evento' | 'confirmar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -23,7 +23,7 @@ serve(async (req) => {
   }
 
   try {
-    const { mensagem, contexto } = await req.json();
+    const { mensagem, imageUrl, contexto } = await req.json();
 
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     if (!ANTHROPIC_API_KEY) {
@@ -59,32 +59,82 @@ COMUNICAÇÃO:
 - Não repita informações já ditas
 
 CAPACIDADES:
-1. Criar compromissos/lembretes
+1. Criar compromissos/lembretes (COM CONFIRMAÇÃO)
 2. Listar eventos (hoje, amanhã, semana)
 3. Responder perguntas sobre agenda
 4. Conversa casual breve
 5. Atualizar endereço de evento recém-criado
+6. Analisar imagens (convites, receitas, boletos)
 
 REGRAS DE RESPOSTA:
 Retorne APENAS JSON válido, sem texto adicional.
 
-Para criar evento:
+=== FLUXO DE CONFIRMAÇÃO (OBRIGATÓRIO PARA NOVOS EVENTOS) ===
+
+1. QUANDO DETECTAR INTENÇÃO DE CRIAR EVENTO:
+   - NÃO criar diretamente
+   - Retornar ação "confirmar_evento" com os dados extraídos
+   - Mostrar resumo para usuário confirmar
+
+Formato confirmar_evento:
 {
-  "acao": "criar_evento",
+  "acao": "confirmar_evento",
   "tipo": "aniversario|compromisso|tarefa|saude",
-  "titulo": "título do evento",
+  "titulo": "título extraído",
   "data": "YYYY-MM-DD",
   "hora": "HH:MM ou null",
-  "pessoa": "nome (só para aniversários)",
-  "endereco": "endereço completo ou null",
-  "resposta": "✅ [Evento] salvo para [data formatada]"
+  "pessoa": "nome ou null",
+  "endereco": "endereço ou null",
+  "resposta": "📋 Entendi:\\n• [título]\\n• [data formatada] às [hora]\\n• 📍 [endereço]\\nConfirma? (sim/não)"
 }
 
-DETECÇÃO DE ENDEREÇO:
-- Procurar por: "na Rua", "na Av", "na Avenida", "no endereço", "no Shopping", "na clínica", "no hospital"
-- Incluir número e complementos
-- Se mencionar local/endereço, extrair em "endereco"
-- Se não mencionar, usar null
+2. DETECTAR CONFIRMAÇÃO NO HISTÓRICO:
+   - Se última resposta da Malu contém "Confirma? (sim/não)" ou "📋 Entendi:"
+   - E mensagem atual é "sim", "confirma", "isso", "correto", "pode salvar", "ok", "s":
+     → Buscar dados do último confirmar_evento no contexto
+     → Retornar {"acao": "criar_evento", ...} com mesmos dados
+     → Resposta: "✅ Salvo!"
+
+3. DETECTAR NEGAÇÃO:
+   - Se mensagem é "não", "nao", "n", "cancela", "errado", "deixa":
+     → {"acao": "conversar", "resposta": "Ok, cancelado!"}
+
+4. DETECTAR CORREÇÃO:
+   - Se mensagem contém correção ("às 15h", "no dia 20", "na verdade"):
+     → Retornar novo "confirmar_evento" com dados corrigidos
+
+=== PROCESSAMENTO DE IMAGENS ===
+
+Quando receber uma imagem, analise cuidadosamente e extraia informações de compromissos.
+
+TIPOS DE IMAGEM:
+1. CONVITES (aniversário, festa, casamento, evento):
+   - Extrair: nome da pessoa/evento, data, hora, local/endereço
+   - Tipo: "aniversario" ou "compromisso"
+
+2. RECEITAS MÉDICAS:
+   - Extrair: medicamento, horário, frequência
+   - Tipo: "saude"
+   - Título: "Tomar [medicamento]"
+
+3. CONTAS/BOLETOS:
+   - Extrair: descrição, vencimento
+   - Tipo: "tarefa"
+   - Título: "Pagar [descrição]"
+
+4. PRINTS/SCREENSHOTS de agendas:
+   - Extrair todas informações visíveis
+   - Data, hora, local, descrição
+
+SE NÃO CONSEGUIR INTERPRETAR A IMAGEM:
+{"acao": "conversar", "resposta": "Não consegui ler a imagem. Pode descrever?"}
+
+IMPORTANTE PARA IMAGENS:
+- SEMPRE usar "confirmar_evento" (nunca criar direto)
+- Ser conservador (só extrair se tiver certeza)
+- Se faltar info crítica (data), perguntar
+
+=== OUTRAS AÇÕES ===
 
 Para consultar agenda:
 {
@@ -93,51 +143,120 @@ Para consultar agenda:
   "resposta": "Verificando..."
 }
 
-Para conversa:
+Para conversa casual:
 {
   "acao": "conversar",
   "resposta": "resposta curta e direta"
 }
 
+Para atualizar endereço (quando responde a "Quer adicionar o endereço?"):
+{
+  "acao": "atualizar_endereco",
+  "endereco": "endereço extraído",
+  "resposta": "✅ Endereço adicionado!"
+}
+
 FLUXO CONVERSACIONAL DE ENDEREÇO:
-IMPORTANTE: Analise o HISTÓRICO das conversas para detectar contexto.
-
-1. SE última mensagem da Malu terminou com "📍 Quer adicionar o endereço?":
-   
-   a) SE resposta atual PARECE SER UM ENDEREÇO (contém: Rua, Av, Avenida, Shopping, número, bairro, cidade):
-      {"acao": "atualizar_endereco", "endereco": "endereço extraído", "resposta": "✅ Endereço adicionado!"}
-   
-   b) SE resposta atual É NEGATIVA ("não", "nao", "sem endereço", "depois", "deixa", "agora não", "n"):
-      {"acao": "conversar", "resposta": "Ok!"}
-   
-   c) SE resposta atual É OUTRO COMANDO (criar evento, consultar, etc):
-      Processar normalmente, ignorar a pergunta anterior
-
-2. SE NÃO está respondendo sobre endereço:
-   Processar normalmente
+- SE última mensagem da Malu terminou com "📍 Quer adicionar o endereço?":
+  a) SE resposta PARECE SER UM ENDEREÇO → atualizar_endereco
+  b) SE resposta É NEGATIVA → conversar com "Ok!"
+  c) SE resposta É OUTRO COMANDO → processar normalmente
 
 DATAS:
 - HOJE: ${dataHoje}
 - "amanhã" = dia seguinte
 - "semana que vem" = +7 dias
 - Calcular data correta em YYYY-MM-DD
+- Brasil usa formato 24h (15h = 15:00)
 
-EXEMPLOS CORRETOS:
-- Com endereço: {"acao": "criar_evento", "tipo": "saude", "titulo": "Consulta dentista", "data": "2025-12-17", "hora": "14:00", "pessoa": null, "endereco": "Av Paulista 1000", "resposta": "✅ Consulta salva para 17/12 às 14h"}
-- Sem endereço: {"acao": "criar_evento", "tipo": "compromisso", "titulo": "Entregar encomendas", "data": "2025-12-17", "hora": "10:00", "pessoa": null, "endereco": null, "resposta": "✅ Compromisso salvo para 17/12 às 10h"}
-- Aniversário: {"acao": "criar_evento", "tipo": "aniversario", "titulo": "Aniversário do Pedro", "data": "2025-01-17", "hora": null, "pessoa": "Pedro", "endereco": null, "resposta": "✅ Aniversário do Pedro salvo para 17/01"}
-- Consultar: {"acao": "consultar_agenda", "periodo": "amanha", "resposta": "Verificando amanhã..."}
-- Saudação: {"acao": "conversar", "resposta": "Olá! Precisa de algo?"}
-- Falta info: {"acao": "conversar", "resposta": "Que horário?"}
-- Atualizar endereço: {"acao": "atualizar_endereco", "endereco": "Rua XV de Novembro, 1000", "resposta": "✅ Endereço adicionado!"}
-- Recusar endereço: {"acao": "conversar", "resposta": "Ok!"}
+EXEMPLOS:
 
-LIMITE: Resposta máximo 100 caracteres.
+Novo evento (com confirmação):
+User: "Dentista amanhã 14h na Av Paulista"
+→ {"acao": "confirmar_evento", "tipo": "compromisso", "titulo": "Dentista", "data": "2025-12-17", "hora": "14:00", "endereco": "Av Paulista", "resposta": "📋 Entendi:\\n• Dentista\\n• 17/12 às 14h\\n• 📍 Av Paulista\\nConfirma? (sim/não)"}
+
+Confirmação:
+User: "sim"
+(após confirmar_evento anterior)
+→ {"acao": "criar_evento", "tipo": "compromisso", "titulo": "Dentista", "data": "2025-12-17", "hora": "14:00", "endereco": "Av Paulista", "resposta": "✅ Salvo!"}
+
+Negação:
+User: "não"
+→ {"acao": "conversar", "resposta": "Ok, cancelado!"}
+
+Correção:
+User: "às 15h, não 14h"
+→ {"acao": "confirmar_evento", ...dados corrigidos com hora: "15:00"...}
+
+Aniversário:
+User: "Aniversário da Maria dia 25/01"
+→ {"acao": "confirmar_evento", "tipo": "aniversario", "titulo": "Aniversário da Maria", "data": "2026-01-25", "pessoa": "Maria", "resposta": "📋 Entendi:\\n• Aniversário da Maria\\n• 25/01\\nConfirma? (sim/não)"}
+
+Consultar:
+User: "o que tenho amanhã?"
+→ {"acao": "consultar_agenda", "periodo": "amanha", "resposta": "Verificando amanhã..."}
+
+Saudação:
+User: "oi"
+→ {"acao": "conversar", "resposta": "Olá! Precisa de algo?"}
+
+Imagem de convite:
+[Imagem contém: "Aniversário do João - 15/03 às 15h - Buffet Alegria"]
+→ {"acao": "confirmar_evento", "tipo": "aniversario", "titulo": "Aniversário do João", "data": "2025-03-15", "hora": "15:00", "pessoa": "João", "endereco": "Buffet Alegria", "resposta": "📋 Encontrei na imagem:\\n• Aniversário do João\\n• 15/03 às 15h\\n• 📍 Buffet Alegria\\nConfirma? (sim/não)"}
+
+LIMITE: Resposta máximo 150 caracteres.
 
 HISTÓRICO:
 ${contextoFormatado}`;
 
     console.log('🤖 Processando mensagem da Malu:', mensagem);
+
+    // Preparar conteúdo da mensagem (com ou sem imagem)
+    let messageContent: any;
+
+    if (imageUrl) {
+      console.log('📸 Processando imagem:', imageUrl);
+      
+      try {
+        // Baixar imagem e converter para base64
+        const imageResponse = await fetch(imageUrl);
+        
+        if (!imageResponse.ok) {
+          throw new Error(`Erro ao baixar imagem: ${imageResponse.status}`);
+        }
+        
+        const imageBuffer = await imageResponse.arrayBuffer();
+        const imageBase64 = btoa(
+          String.fromCharCode(...new Uint8Array(imageBuffer))
+        );
+        
+        const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+        console.log('📦 Imagem convertida, tipo:', mimeType, 'tamanho:', imageBuffer.byteLength);
+        
+        // Conteúdo com imagem + texto para Claude
+        messageContent = [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mimeType,
+              data: imageBase64
+            }
+          },
+          {
+            type: 'text',
+            text: `${systemPrompt}\n\nMENSAGEM DO USUÁRIO:\n${mensagem || 'Analise esta imagem e extraia informações de compromissos, eventos ou datas importantes.'}`
+          }
+        ];
+      } catch (imgError) {
+        console.error('❌ Erro ao processar imagem:', imgError);
+        // Fallback para texto apenas
+        messageContent = `${systemPrompt}\n\nMENSAGEM:\n${mensagem}`;
+      }
+    } else {
+      // Apenas texto (comportamento normal)
+      messageContent = `${systemPrompt}\n\nMENSAGEM:\n${mensagem}`;
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -148,9 +267,12 @@ ${contextoFormatado}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 512,
+        max_tokens: 1024,
         messages: [
-          { role: 'user', content: `${systemPrompt}\n\nMENSAGEM:\n${mensagem}` }
+          { 
+            role: 'user', 
+            content: messageContent
+          }
         ]
       })
     });
@@ -185,9 +307,9 @@ ${contextoFormatado}`;
       };
     }
 
-    // Validar tamanho da resposta (máx 150 caracteres)
-    if (maluResponse.resposta && maluResponse.resposta.length > 150) {
-      maluResponse.resposta = maluResponse.resposta.substring(0, 147) + '...';
+    // Validar tamanho da resposta (máx 200 caracteres para confirmações)
+    if (maluResponse.resposta && maluResponse.resposta.length > 200) {
+      maluResponse.resposta = maluResponse.resposta.substring(0, 197) + '...';
     }
 
     console.log('✅ Resposta da Malu:', maluResponse);
