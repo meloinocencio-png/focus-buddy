@@ -76,6 +76,7 @@ export type Database = {
       }
       eventos: {
         Row: {
+          checklist: Json | null
           criado_em: string | null
           data: string
           descricao: string | null
@@ -88,6 +89,7 @@ export type Database = {
           usuario_id: string
         }
         Insert: {
+          checklist?: Json | null
           criado_em?: string | null
           data: string
           descricao?: string | null
@@ -100,6 +102,7 @@ export type Database = {
           usuario_id: string
         }
         Update: {
+          checklist?: Json | null
           criado_em?: string | null
           data?: string
           descricao?: string | null
