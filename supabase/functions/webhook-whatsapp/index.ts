@@ -203,7 +203,8 @@ serve(async (req) => {
         pessoa: maluResponse.pessoa,
         endereco: maluResponse.endereco || null,
         lembretes: ['7d', '1d', 'hoje'],
-        usuario_id: userId
+        usuario_id: userId,
+        checklist: maluResponse.checklist || []
       };
 
       // Se tem hora, adicionar ao timestamp

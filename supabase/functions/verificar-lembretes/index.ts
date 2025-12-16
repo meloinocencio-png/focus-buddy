@@ -63,14 +63,20 @@ serve(async (req) => {
       const dataEvento = new Date(evento.data);
       const diasRestantes = Math.ceil((dataEvento.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24));
 
-      // ANIVERSÁRIOS - lembretes em cascata
+      // ANIVERSÁRIOS - lembretes em cascata com checklist
       if (evento.tipo === 'aniversario') {
         const dataFormatada = `${dataEvento.getDate()}/${dataEvento.getMonth() + 1}`;
         
         if (diasRestantes === 7) {
+          let msg = `🎂 Próxima semana: aniversário de ${evento.pessoa} (dia ${dataFormatada})\n\n`;
+          msg += `📋 Lembrete:\n`;
+          msg += `□ Presente comprado?\n`;
+          msg += `□ Cartão/mensagem?\n`;
+          msg += `□ Confirmou presença?`;
+          
           lembretes.push({
             whatsapp,
-            mensagem: `🎂 Próxima semana: aniversário de ${evento.pessoa} (dia ${dataFormatada})`,
+            mensagem: msg,
             evento_id: evento.id,
             tipo: '7d'
           });
@@ -101,9 +107,8 @@ serve(async (req) => {
         }
       }
 
-      // COMPROMISSOS - lembretes 3h e 1h antes (somente no dia)
+      // COMPROMISSOS - lembretes 3h, 1h e 30min antes (somente no dia)
       if (evento.tipo !== 'aniversario' && diasRestantes === 0) {
-        // Extrair hora do timestamp
         const horaEvento = dataEvento.getHours();
         const minutoEvento = dataEvento.getMinutes();
         const horaFormatada = `${horaEvento.toString().padStart(2, '0')}:${minutoEvento.toString().padStart(2, '0')}`;
@@ -134,6 +139,26 @@ serve(async (req) => {
             mensagem: `⏰ Em 1h: ${evento.titulo}${enderecoInfo}`,
             evento_id: evento.id,
             tipo: '1h'
+          });
+        }
+
+        // CHECKLIST - 30 minutos antes (somente se tem checklist)
+        const checklist = evento.checklist as string[] | null;
+        if (checklist && checklist.length > 0 && horasRestantes > 0.4 && horasRestantes <= 0.6) {
+          let checklistMsg = `⏰ ${evento.titulo} em 30 minutos!\n\n`;
+          checklistMsg += `📋 Já pegou:\n`;
+          
+          checklist.forEach((item: string) => {
+            checklistMsg += `□ ${item}\n`;
+          });
+          
+          checklistMsg += `\nTudo pronto?`;
+
+          lembretes.push({
+            whatsapp,
+            mensagem: checklistMsg,
+            evento_id: evento.id,
+            tipo: '30min_checklist'
           });
         }
       }
