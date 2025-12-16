@@ -6,7 +6,9 @@ const corsHeaders = {
 };
 
 interface MaluResponse {
-  acao: 'criar_evento' | 'confirmar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
+  acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
+        'confirmar_edicao' | 'confirmar_cancelamento' | 'consultar_agenda' | 
+        'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -14,8 +16,11 @@ interface MaluResponse {
   hora?: string;
   pessoa?: string;
   endereco?: string;
-  periodo?: 'hoje' | 'amanha' | 'semana' | 'todos';  // ✅ Adicionado 'todos'
+  periodo?: 'hoje' | 'amanha' | 'semana' | 'todos';
   checklist?: string[];
+  busca?: string;        // Para editar/cancelar - palavra-chave do evento
+  nova_data?: string;    // Para editar - nova data (YYYY-MM-DD)
+  nova_hora?: string;    // Para editar - nova hora (HH:MM)
 }
 
 serve(async (req) => {
@@ -222,6 +227,47 @@ Para atualizar endereço:
   "endereco": "endereço extraído",
   "resposta": "✅ Endereço adicionado!"
 }
+
+=== EDITAR E CANCELAR EVENTOS ===
+
+EDITAR EVENTO:
+Comandos: "muda [evento] para [hora/data]", "altera", "reagenda", "atrasa", "adianta"
+
+Formato editar_evento:
+{
+  "acao": "editar_evento",
+  "busca": "palavra-chave do título",
+  "nova_data": "YYYY-MM-DD ou null se não mudar",
+  "nova_hora": "HH:MM ou null se não mudar",
+  "resposta": "🔍 Procurando [busca]..."
+}
+
+Exemplos:
+- "muda dentista para 15h" → {"acao": "editar_evento", "busca": "dentista", "nova_hora": "15:00"}
+- "reagenda reunião para amanhã" → {"acao": "editar_evento", "busca": "reunião", "nova_data": "[data amanhã]"}
+- "adianta fono 30 min" → calcular nova hora com editar_evento
+
+CANCELAR EVENTO:
+Comandos: "cancela [evento]", "remove", "apaga", "deleta", "não vai ter"
+
+Formato cancelar_evento:
+{
+  "acao": "cancelar_evento",
+  "busca": "palavra-chave do título",
+  "resposta": "🔍 Procurando [busca] para cancelar..."
+}
+
+Exemplos:
+- "cancela dentista" → {"acao": "cancelar_evento", "busca": "dentista"}
+- "remove reunião de sexta" → {"acao": "cancelar_evento", "busca": "reunião"}
+
+CONFIRMAÇÃO DE EDIÇÃO/CANCELAMENTO:
+Se contexto mostra ação pendente de editar ou cancelar:
+- "sim", "confirma", "pode", "isso" → {"acao": "confirmar_edicao"} ou {"acao": "confirmar_cancelamento"}
+- "não", "cancela", "deixa" → {"acao": "conversar", "resposta": "Ok, mantido!"}
+- Escolha por número: "1", "2" → confirmar com evento selecionado
+
+IMPORTANTE: busca deve ser palavra PRESENTE no título do evento
 
 DATAS:
 - HOJE: ${dataHoje}
