@@ -33,7 +33,9 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log('📥 Webhook Z-API recebido:', JSON.stringify(payload));
+    
+    // === LOG COMPLETO DO PAYLOAD (DEBUG CRÍTICO) ===
+    console.log('📦 PAYLOAD COMPLETO:', JSON.stringify(payload, null, 2));
 
     // Z-API pode enviar diferentes formatos de payload
     // Extrair número e mensagem
@@ -45,14 +47,45 @@ serve(async (req) => {
       phone = phone.split('@')[0];
     }
 
-    // Detectar imagem no payload da Z-API
+    // === DETECÇÃO DE IMAGEM - MÚLTIPLOS CAMINHOS Z-API ===
     let imageUrl: string | null = null;
     let imageCaption: string | null = null;
 
+    // Log de debug para todos os campos de imagem possíveis
+    console.log('🔍 Verificando campos de imagem:', {
+      'payload.image': !!payload.image,
+      'payload.image?.imageUrl': payload.image?.imageUrl?.substring(0, 50),
+      'payload.imageMessage': !!payload.imageMessage,
+      'payload.imageMessage?.imageUrl': payload.imageMessage?.imageUrl?.substring(0, 50),
+      'payload.media': !!payload.media,
+      'payload.message?.imageMessage': !!payload.message?.imageMessage,
+    });
+
+    // Tentar múltiplos caminhos possíveis do Z-API
     if (payload.image?.imageUrl) {
       imageUrl = payload.image.imageUrl;
       imageCaption = payload.image.caption || '';
-      console.log('🖼️ Imagem detectada:', imageUrl);
+      console.log('🖼️ IMAGEM via payload.image');
+    } else if (payload.imageMessage?.imageUrl) {
+      imageUrl = payload.imageMessage.imageUrl;
+      imageCaption = payload.imageMessage.caption || '';
+      console.log('🖼️ IMAGEM via payload.imageMessage');
+    } else if (payload.media?.url) {
+      imageUrl = payload.media.url;
+      imageCaption = payload.media.caption || '';
+      console.log('🖼️ IMAGEM via payload.media');
+    } else if (payload.message?.imageMessage?.url) {
+      imageUrl = payload.message.imageMessage.url;
+      imageCaption = payload.message?.imageMessage?.caption || '';
+      console.log('🖼️ IMAGEM via payload.message.imageMessage');
+    }
+
+    if (imageUrl) {
+      console.log('📸 URL DA IMAGEM:', imageUrl);
+      console.log('📝 Caption:', imageCaption);
+      console.log('📄 MimeType:', payload.image?.mimetype || payload.imageMessage?.mimetype || 'unknown');
+    } else {
+      console.log('📝 Mensagem sem imagem');
     }
 
     // Verificar se é mensagem de áudio e transcrever
