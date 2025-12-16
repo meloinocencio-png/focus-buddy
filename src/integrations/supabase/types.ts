@@ -53,6 +53,7 @@ export type Database = {
           mensagem_usuario: string
           usuario_id: string | null
           whatsapp_de: string
+          zapi_message_id: string | null
         }
         Insert: {
           contexto?: Json | null
@@ -62,6 +63,7 @@ export type Database = {
           mensagem_usuario: string
           usuario_id?: string | null
           whatsapp_de: string
+          zapi_message_id?: string | null
         }
         Update: {
           contexto?: Json | null
@@ -71,6 +73,7 @@ export type Database = {
           mensagem_usuario?: string
           usuario_id?: string | null
           whatsapp_de?: string
+          zapi_message_id?: string | null
         }
         Relationships: []
       }
