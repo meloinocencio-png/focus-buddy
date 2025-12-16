@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface MaluResponse {
-  acao: 'criar_evento' | 'consultar_agenda' | 'conversar';
+  acao: 'criar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -63,6 +63,7 @@ CAPACIDADES:
 2. Listar eventos (hoje, amanhã, semana)
 3. Responder perguntas sobre agenda
 4. Conversa casual breve
+5. Atualizar endereço de evento recém-criado
 
 REGRAS DE RESPOSTA:
 Retorne APENAS JSON válido, sem texto adicional.
@@ -98,6 +99,23 @@ Para conversa:
   "resposta": "resposta curta e direta"
 }
 
+FLUXO CONVERSACIONAL DE ENDEREÇO:
+IMPORTANTE: Analise o HISTÓRICO das conversas para detectar contexto.
+
+1. SE última mensagem da Malu terminou com "📍 Quer adicionar o endereço?":
+   
+   a) SE resposta atual PARECE SER UM ENDEREÇO (contém: Rua, Av, Avenida, Shopping, número, bairro, cidade):
+      {"acao": "atualizar_endereco", "endereco": "endereço extraído", "resposta": "✅ Endereço adicionado!"}
+   
+   b) SE resposta atual É NEGATIVA ("não", "nao", "sem endereço", "depois", "deixa", "agora não", "n"):
+      {"acao": "conversar", "resposta": "Ok!"}
+   
+   c) SE resposta atual É OUTRO COMANDO (criar evento, consultar, etc):
+      Processar normalmente, ignorar a pergunta anterior
+
+2. SE NÃO está respondendo sobre endereço:
+   Processar normalmente
+
 DATAS:
 - HOJE: ${dataHoje}
 - "amanhã" = dia seguinte
@@ -111,6 +129,8 @@ EXEMPLOS CORRETOS:
 - Consultar: {"acao": "consultar_agenda", "periodo": "amanha", "resposta": "Verificando amanhã..."}
 - Saudação: {"acao": "conversar", "resposta": "Olá! Precisa de algo?"}
 - Falta info: {"acao": "conversar", "resposta": "Que horário?"}
+- Atualizar endereço: {"acao": "atualizar_endereco", "endereco": "Rua XV de Novembro, 1000", "resposta": "✅ Endereço adicionado!"}
+- Recusar endereço: {"acao": "conversar", "resposta": "Ok!"}
 
 LIMITE: Resposta máximo 100 caracteres.
 

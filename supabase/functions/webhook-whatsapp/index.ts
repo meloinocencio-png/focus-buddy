@@ -193,7 +193,39 @@ serve(async (req) => {
         // Adicionar endereço na resposta se existir
         if (maluResponse.endereco) {
           respostaFinal += `\n📍 ${maluResponse.endereco}`;
+        } else {
+          // Perguntar sobre endereço se não tem
+          respostaFinal += '\n📍 Quer adicionar o endereço?';
         }
+      }
+    } else if (maluResponse.acao === 'atualizar_endereco') {
+      // Buscar último evento criado do usuário (últimas 24h)
+      const { data: ultimoEvento, error: buscarError } = await supabase
+        .from('eventos')
+        .select('id, titulo')
+        .eq('usuario_id', userId)
+        .gte('criado_em', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .order('criado_em', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (ultimoEvento && !buscarError) {
+        // Atualizar endereço do evento
+        const { error: updateError } = await supabase
+          .from('eventos')
+          .update({ endereco: maluResponse.endereco })
+          .eq('id', ultimoEvento.id);
+
+        if (updateError) {
+          console.error('Erro ao atualizar endereço:', updateError);
+          respostaFinal = 'Não consegui salvar o endereço. Tente novamente.';
+        } else {
+          console.log(`✅ Endereço atualizado no evento ${ultimoEvento.id}: ${maluResponse.endereco}`);
+          respostaFinal = maluResponse.resposta || '✅ Endereço adicionado!';
+        }
+      } else {
+        console.log('⚠️ Nenhum evento recente encontrado para atualizar');
+        respostaFinal = 'Não encontrei evento recente. Crie um novo com o endereço.';
       }
     } else if (maluResponse.acao === 'consultar_agenda') {
       // Buscar eventos do período
