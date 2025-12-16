@@ -287,7 +287,7 @@ ${contextoFormatado}`;
         const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
         console.log('✅ Imagem pronta! Tipo:', mimeType, '| Tamanho:', imageBuffer.byteLength, 'bytes');
         
-        // Conteúdo com imagem + texto para Claude
+        // Conteúdo com imagem + texto para Claude (sem system prompt no content)
         messageContent = [
           {
             type: 'image',
@@ -299,7 +299,7 @@ ${contextoFormatado}`;
           },
           {
             type: 'text',
-            text: `${systemPrompt}\n\nMENSAGEM DO USUÁRIO:\n${mensagem || 'Analise esta imagem de convite/documento e extraia TODAS as informações visíveis: nome, data, hora, endereço. Crie um evento com esses dados.'}`
+            text: mensagem || 'Analise esta imagem de convite/documento e extraia TODAS as informações visíveis: nome, data, hora, endereço. Crie um evento com esses dados.'
           }
         ];
         console.log('📤 Enviando para Claude com imagem...');
@@ -307,11 +307,11 @@ ${contextoFormatado}`;
         console.error('❌ ERRO ao processar imagem:', imgError);
         console.error('Stack:', imgError instanceof Error ? imgError.stack : 'N/A');
         // Fallback para texto apenas
-        messageContent = `${systemPrompt}\n\nMENSAGEM:\n${mensagem}`;
+        messageContent = mensagem;
       }
     } else {
       // Apenas texto (comportamento normal)
-      messageContent = `${systemPrompt}\n\nMENSAGEM:\n${mensagem}`;
+      messageContent = mensagem;
     }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -324,6 +324,7 @@ ${contextoFormatado}`;
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
+        system: systemPrompt,
         messages: [
           { 
             role: 'user', 
