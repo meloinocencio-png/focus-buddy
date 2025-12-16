@@ -175,17 +175,24 @@ serve(async (req) => {
       });
     }
 
-    // === VERIFICAÇÃO DE DUPLICATA USANDO messageId DO Z-API (CRÍTICO) ===
-    const { data: jaProcessado } = await supabase
+    // === LOCK IMEDIATO: INSERT para bloquear duplicatas (RACE CONDITION FIX) ===
+    const { data: lockResult, error: lockError } = await supabase
       .from('conversas')
+      .insert([{
+        whatsapp_de: phone,
+        mensagem_usuario: message || '[processando]',
+        mensagem_malu: '[processando]',  // Marcador temporário
+        usuario_id: userId,
+        zapi_message_id: zapiMessageId
+      }])
       .select('id')
-      .eq('zapi_message_id', zapiMessageId)
-      .maybeSingle();
+      .single();
 
-    if (jaProcessado) {
-      console.log('⏭️ Mensagem já processada (messageId:', zapiMessageId, ')');
+    // Se deu erro de UNIQUE CONSTRAINT = já está sendo processada por outra instância
+    if (lockError?.code === '23505') {
+      console.log('⏭️ Mensagem já em processamento (lock):', zapiMessageId);
       return new Response(JSON.stringify({ 
-        status: 'already_processed',
+        status: 'already_processing',
         message_id: zapiMessageId 
       }), {
         status: 200,
@@ -193,8 +200,13 @@ serve(async (req) => {
       });
     }
 
-    console.log('✅ Nova mensagem, processando...');
+    if (lockError) {
+      console.error('❌ Erro ao criar lock:', lockError);
+      throw lockError;
+    }
 
+    const conversaId = lockResult.id;
+    console.log('🔒 Lock criado:', conversaId);
     console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}${imageUrl ? ' [+imagem]' : ''}`);
 
     // 1. Buscar contexto das últimas 5 conversas
@@ -469,31 +481,20 @@ serve(async (req) => {
     const enviarResult = await enviarResponse.json();
     console.log('📤 Resultado envio:', enviarResult);
 
-    // 5. Salvar conversa no banco COM zapi_message_id (evita duplicatas)
+    // 5. Atualizar registro de lock com a resposta real
     const mensagemParaSalvar = imageUrl ? `${imageCaption || 'Imagem'} [+imagem]` : message;
     
     const { error: conversaError } = await supabase
       .from('conversas')
-      .insert([{
-        whatsapp_de: phone,
+      .update({
         mensagem_usuario: mensagemParaSalvar,
         mensagem_malu: respostaFinal,
-        contexto: contexto,
-        usuario_id: userId,
-        zapi_message_id: zapiMessageId  // ✅ Identificador único do Z-API
-      }]);
-
-    // Se der erro de UNIQUE constraint, é duplicata (race condition catch)
-    if (conversaError?.code === '23505') {
-      console.log('⏭️ Duplicata detectada via unique constraint:', zapiMessageId);
-      return new Response(JSON.stringify({ status: 'duplicate_constraint' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+        contexto: contexto
+      })
+      .eq('id', conversaId);
 
     if (conversaError) {
-      console.error('Erro ao salvar conversa:', conversaError);
+      console.error('Erro ao atualizar conversa:', conversaError);
     }
 
     return new Response(
@@ -508,6 +509,10 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error('❌ Erro no webhook:', error);
+    
+    // Nota: não deletamos o lock em caso de erro para evitar reprocessamento
+    // O registro ficará com '[processando]' indicando falha
+    
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { 
