@@ -119,6 +119,23 @@ serve(async (req) => {
       });
     }
 
+    // Verificar se já processamos esta mensagem recentemente (últimos 60 segundos)
+    const { data: mensagemExistente } = await supabase
+      .from('conversas')
+      .select('id')
+      .eq('whatsapp_de', phone)
+      .eq('mensagem_usuario', message)
+      .gte('criada_em', new Date(Date.now() - 60 * 1000).toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (mensagemExistente) {
+      console.log('⏭️ Mensagem duplicada ignorada (já processada nos últimos 60s)');
+      return new Response(JSON.stringify({ status: 'duplicate_ignored' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}`);
 
     // 1. Buscar contexto das últimas 5 conversas
