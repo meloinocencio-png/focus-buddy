@@ -26,6 +26,7 @@ interface Evento {
   descricao: string | null;
   data: string;
   pessoa: string | null;
+  endereco: string | null;
 }
 
 export const Dashboard = () => {
@@ -147,6 +148,7 @@ export const Dashboard = () => {
                   descricao={evento.descricao || undefined}
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
+                  endereco={evento.endereco || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />
@@ -169,6 +171,7 @@ export const Dashboard = () => {
                   descricao={evento.descricao || undefined}
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
+                  endereco={evento.endereco || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />
@@ -191,6 +194,7 @@ export const Dashboard = () => {
                   descricao={evento.descricao || undefined}
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
+                  endereco={evento.endereco || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />

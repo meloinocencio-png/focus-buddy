@@ -79,6 +79,7 @@ export type Database = {
           criado_em: string | null
           data: string
           descricao: string | null
+          endereco: string | null
           id: string
           lembretes: Json | null
           pessoa: string | null
@@ -90,6 +91,7 @@ export type Database = {
           criado_em?: string | null
           data: string
           descricao?: string | null
+          endereco?: string | null
           id?: string
           lembretes?: Json | null
           pessoa?: string | null
@@ -101,6 +103,7 @@ export type Database = {
           criado_em?: string | null
           data?: string
           descricao?: string | null
+          endereco?: string | null
           id?: string
           lembretes?: Json | null
           pessoa?: string | null

@@ -47,7 +47,7 @@ serve(async (req) => {
       // Buscar eventos de HOJE para este usuário
       const { data: eventosHoje } = await supabase
         .from('eventos')
-        .select('titulo, data, tipo')
+        .select('titulo, data, tipo, endereco')
         .eq('usuario_id', usuario.usuario_id)
         .gte('data', `${hoje}T00:00:00`)
         .lte('data', `${hoje}T23:59:59`)
@@ -60,7 +60,11 @@ serve(async (req) => {
           const hora = new Date(e.data);
           const horaFormatada = `${hora.getHours().toString().padStart(2, '0')}:${hora.getMinutes().toString().padStart(2, '0')}`;
           const horarioTexto = hora.getHours() === 0 && hora.getMinutes() === 0 ? 'Dia todo' : horaFormatada;
-          return `• ${horarioTexto} - ${e.titulo}`;
+          let item = `• ${horarioTexto} - ${e.titulo}`;
+          if (e.endereco) {
+            item += `\n  📍 ${e.endereco}`;
+          }
+          return item;
         }).join('\n');
 
         mensagem = `📅 Bom dia! Hoje:\n${lista}`;

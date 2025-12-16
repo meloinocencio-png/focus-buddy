@@ -13,6 +13,7 @@ interface MaluResponse {
   data?: string;
   hora?: string;
   pessoa?: string;
+  endereco?: string;
   periodo?: 'hoje' | 'amanha' | 'semana';
 }
 
@@ -74,8 +75,15 @@ Para criar evento:
   "data": "YYYY-MM-DD",
   "hora": "HH:MM ou null",
   "pessoa": "nome (só para aniversários)",
+  "endereco": "endereço completo ou null",
   "resposta": "✅ [Evento] salvo para [data formatada]"
 }
+
+DETECÇÃO DE ENDEREÇO:
+- Procurar por: "na Rua", "na Av", "na Avenida", "no endereço", "no Shopping", "na clínica", "no hospital"
+- Incluir número e complementos
+- Se mencionar local/endereço, extrair em "endereco"
+- Se não mencionar, usar null
 
 Para consultar agenda:
 {
@@ -97,8 +105,9 @@ DATAS:
 - Calcular data correta em YYYY-MM-DD
 
 EXEMPLOS CORRETOS:
-- Criar: {"acao": "criar_evento", "tipo": "compromisso", "titulo": "Entregar encomendas Paola", "data": "2025-12-17", "hora": "10:00", "pessoa": null, "resposta": "✅ Compromisso salvo para 17/12 às 10h"}
-- Aniversário: {"acao": "criar_evento", "tipo": "aniversario", "titulo": "Aniversário do Pedro", "data": "2025-01-17", "hora": null, "pessoa": "Pedro", "resposta": "✅ Aniversário do Pedro salvo para 17/01"}
+- Com endereço: {"acao": "criar_evento", "tipo": "saude", "titulo": "Consulta dentista", "data": "2025-12-17", "hora": "14:00", "pessoa": null, "endereco": "Av Paulista 1000", "resposta": "✅ Consulta salva para 17/12 às 14h"}
+- Sem endereço: {"acao": "criar_evento", "tipo": "compromisso", "titulo": "Entregar encomendas", "data": "2025-12-17", "hora": "10:00", "pessoa": null, "endereco": null, "resposta": "✅ Compromisso salvo para 17/12 às 10h"}
+- Aniversário: {"acao": "criar_evento", "tipo": "aniversario", "titulo": "Aniversário do Pedro", "data": "2025-01-17", "hora": null, "pessoa": "Pedro", "endereco": null, "resposta": "✅ Aniversário do Pedro salvo para 17/01"}
 - Consultar: {"acao": "consultar_agenda", "periodo": "amanha", "resposta": "Verificando amanhã..."}
 - Saudação: {"acao": "conversar", "resposta": "Olá! Precisa de algo?"}
 - Falta info: {"acao": "conversar", "resposta": "Que horário?"}
