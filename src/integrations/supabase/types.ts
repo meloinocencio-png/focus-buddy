@@ -87,6 +87,7 @@ export type Database = {
           id: string
           lembretes: Json | null
           pessoa: string | null
+          status: string | null
           tipo: string
           titulo: string
           usuario_id: string
@@ -100,6 +101,7 @@ export type Database = {
           id?: string
           lembretes?: Json | null
           pessoa?: string | null
+          status?: string | null
           tipo: string
           titulo: string
           usuario_id: string
@@ -113,6 +115,7 @@ export type Database = {
           id?: string
           lembretes?: Json | null
           pessoa?: string | null
+          status?: string | null
           tipo?: string
           titulo?: string
           usuario_id?: string

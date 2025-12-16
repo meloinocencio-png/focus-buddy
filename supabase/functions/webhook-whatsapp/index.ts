@@ -217,7 +217,7 @@ serve(async (req) => {
       .order('criada_em', { ascending: false })
       .limit(5);
 
-    const contexto = ultimasConversas?.reverse().map(c => ({
+    const contexto: any[] = ultimasConversas?.reverse().map(c => ({
       usuario: c.mensagem_usuario,
       malu: c.mensagem_malu
     })) || [];
@@ -362,6 +362,7 @@ serve(async (req) => {
         .from('eventos')
         .select('*')
         .eq('usuario_id', userId)
+        .or('status.is.null,status.eq.pendente')
         .gte('data', dataInicio.toISOString())
         .lte('data', dataFim.toISOString())
         .order('data', { ascending: true });
@@ -462,6 +463,209 @@ serve(async (req) => {
                             maluResponse.periodo === 'semana' ? 'essa semana' :
                             'nos próximos 30 dias';
         respostaFinal = `📅 *SUA AGENDA*\n\nNenhum evento ${periodoTexto}! 🎉\n\n💡 Use voz ou foto para criar.`;
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: EDITAR EVENTO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'editar_evento') {
+      console.log('✏️ Buscando para editar:', maluResponse.busca);
+      
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() + 30);
+      
+      const { data: eventosEncontrados } = await supabase
+        .from('eventos')
+        .select('*')
+        .eq('usuario_id', userId)
+        .or('status.is.null,status.eq.pendente')
+        .gte('data', new Date().toISOString())
+        .lte('data', dataLimite.toISOString())
+        .ilike('titulo', `%${maluResponse.busca}%`)
+        .order('data', { ascending: true })
+        .limit(5);
+      
+      if (!eventosEncontrados || eventosEncontrados.length === 0) {
+        respostaFinal = `❌ Não encontrei "${maluResponse.busca}" nos próximos 30 dias.`;
+        
+      } else if (eventosEncontrados.length === 1) {
+        // Único evento - pedir confirmação
+        const evento = eventosEncontrados[0];
+        const dataEvento = new Date(evento.data);
+        const dataAtual = `${dataEvento.getDate().toString().padStart(2, '0')}/${(dataEvento.getMonth() + 1).toString().padStart(2, '0')}`;
+        const horaAtual = `${dataEvento.getHours()}h${dataEvento.getMinutes() > 0 ? dataEvento.getMinutes().toString().padStart(2, '0') : ''}`;
+        
+        respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${dataAtual} às ${horaAtual}\n\n`;
+        
+        if (maluResponse.nova_data || maluResponse.nova_hora) {
+          respostaFinal += `✏️ Mudar para:\n`;
+          
+          if (maluResponse.nova_data) {
+            const nd = new Date(maluResponse.nova_data);
+            respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
+          }
+          
+          if (maluResponse.nova_hora) {
+            const [h, m] = maluResponse.nova_hora.split(':');
+            respostaFinal += `• Hora: ${h}h${m !== '00' ? m : ''}\n`;
+          }
+          
+          respostaFinal += `\nConfirma?`;
+          
+          // Salvar no contexto
+          contexto.push({
+            acao_pendente: 'editar',
+            evento_id: evento.id,
+            nova_data: maluResponse.nova_data,
+            nova_hora: maluResponse.nova_hora
+          });
+        } else {
+          respostaFinal = '❌ Especifique nova data ou hora.';
+        }
+        
+      } else {
+        // Múltiplos eventos - listar para escolha
+        respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
+        eventosEncontrados.forEach((evt: any, idx: number) => {
+          const d = new Date(evt.data);
+          const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+          const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+          respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
+        });
+        respostaFinal += `\nQual editar? (número)`;
+        
+        // Salvar lista no contexto para escolha
+        contexto.push({
+          acao_pendente: 'escolher_editar',
+          eventos: eventosEncontrados.map((e: any) => e.id),
+          nova_data: maluResponse.nova_data,
+          nova_hora: maluResponse.nova_hora
+        });
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: CONFIRMAR EDIÇÃO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'confirmar_edicao') {
+      const acaoPendente = contexto.find((c: any) => c.acao_pendente === 'editar');
+      
+      if (!acaoPendente) {
+        respostaFinal = '❌ Não há edição pendente.';
+      } else {
+        // Buscar evento atual
+        const { data: eventoAtual } = await supabase
+          .from('eventos')
+          .select('data')
+          .eq('id', acaoPendente.evento_id)
+          .single();
+        
+        if (!eventoAtual) {
+          respostaFinal = '❌ Evento não encontrado.';
+        } else {
+          const dataAtual = new Date(eventoAtual.data);
+          
+          // Aplicar nova data
+          if (acaoPendente.nova_data) {
+            const [ano, mes, dia] = acaoPendente.nova_data.split('-');
+            dataAtual.setFullYear(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+          }
+          
+          // Aplicar nova hora
+          if (acaoPendente.nova_hora) {
+            const [hora, minuto] = acaoPendente.nova_hora.split(':');
+            dataAtual.setHours(parseInt(hora), parseInt(minuto), 0, 0);
+          }
+          
+          // Atualizar
+          const { error: updateError } = await supabase
+            .from('eventos')
+            .update({ data: dataAtual.toISOString() })
+            .eq('id', acaoPendente.evento_id);
+          
+          if (updateError) {
+            console.error('Erro ao editar:', updateError);
+            respostaFinal = '❌ Erro ao editar.';
+          } else {
+            console.log('✅ Evento editado:', acaoPendente.evento_id);
+            respostaFinal = '✅ Evento atualizado!';
+          }
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: CANCELAR EVENTO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'cancelar_evento') {
+      console.log('❌ Buscando para cancelar:', maluResponse.busca);
+      
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() + 30);
+      
+      const { data: eventosEncontrados } = await supabase
+        .from('eventos')
+        .select('*')
+        .eq('usuario_id', userId)
+        .or('status.is.null,status.eq.pendente')
+        .gte('data', new Date().toISOString())
+        .lte('data', dataLimite.toISOString())
+        .ilike('titulo', `%${maluResponse.busca}%`)
+        .order('data', { ascending: true })
+        .limit(5);
+      
+      if (!eventosEncontrados || eventosEncontrados.length === 0) {
+        respostaFinal = `❌ Não encontrei "${maluResponse.busca}" para cancelar.`;
+        
+      } else if (eventosEncontrados.length === 1) {
+        const evento = eventosEncontrados[0];
+        const d = new Date(evento.data);
+        const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+        
+        respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
+        
+        contexto.push({
+          acao_pendente: 'cancelar',
+          evento_id: evento.id
+        });
+        
+      } else {
+        respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
+        eventosEncontrados.forEach((evt: any, idx: number) => {
+          const d = new Date(evt.data);
+          const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+          const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+          respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
+        });
+        respostaFinal += `\nQual cancelar? (número)`;
+        
+        contexto.push({
+          acao_pendente: 'escolher_cancelar',
+          eventos: eventosEncontrados.map((e: any) => e.id)
+        });
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: CONFIRMAR CANCELAMENTO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'confirmar_cancelamento') {
+      const acaoPendente = contexto.find((c: any) => c.acao_pendente === 'cancelar');
+      
+      if (!acaoPendente) {
+        respostaFinal = '❌ Não há cancelamento pendente.';
+      } else {
+        // Marcar como cancelado (não deletar - mantém histórico)
+        const { error: updateError } = await supabase
+          .from('eventos')
+          .update({ status: 'cancelado' })
+          .eq('id', acaoPendente.evento_id);
+        
+        if (updateError) {
+          console.error('Erro ao cancelar:', updateError);
+          respostaFinal = '❌ Erro ao cancelar.';
+        } else {
+          console.log('✅ Evento cancelado:', acaoPendente.evento_id);
+          respostaFinal = '✅ Evento cancelado!';
+        }
       }
     }
 
