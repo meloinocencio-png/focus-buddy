@@ -267,9 +267,21 @@ ${contextoFormatado}`;
         const imageBuffer = await imageResponse.arrayBuffer();
         console.log('📦 Buffer size:', imageBuffer.byteLength, 'bytes');
         
-        const imageBase64 = btoa(
-          String.fromCharCode(...new Uint8Array(imageBuffer))
-        );
+        // Função para converter ArrayBuffer para base64 em chunks (suporta arquivos grandes)
+        const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+          const bytes = new Uint8Array(buffer);
+          let binary = '';
+          const chunkSize = 8192; // Processar em chunks de 8KB
+          
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, Array.from(chunk));
+          }
+          
+          return btoa(binary);
+        };
+        
+        const imageBase64 = arrayBufferToBase64(imageBuffer);
         console.log('🔐 Base64 gerado, length:', imageBase64.length);
         
         const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
