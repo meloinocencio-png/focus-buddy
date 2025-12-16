@@ -113,10 +113,17 @@ serve(async (req) => {
         horaEventoMs.setHours(horaEvento, minutoEvento, 0, 0);
         const horasRestantes = (horaEventoMs.getTime() - agora.getTime()) / (1000 * 60 * 60);
 
+        // Preparar links de navegação se tiver endereço
+        let enderecoInfo = '';
+        if (evento.endereco) {
+          const enderecoEncoded = encodeURIComponent(evento.endereco);
+          enderecoInfo = `\n📍 ${evento.endereco}\n🗺️ Waze: https://waze.com/ul?q=${enderecoEncoded}&navigate=yes\n🗺️ Maps: https://www.google.com/maps/search/?api=1&query=${enderecoEncoded}`;
+        }
+
         if (horasRestantes > 2.5 && horasRestantes <= 3.5) {
           lembretes.push({
             whatsapp,
-            mensagem: `⏰ Em 3h: ${evento.titulo} (${horaFormatada})`,
+            mensagem: `⏰ Em 3h: ${evento.titulo} (${horaFormatada})${enderecoInfo}`,
             evento_id: evento.id,
             tipo: '3h'
           });
@@ -124,7 +131,7 @@ serve(async (req) => {
         if (horasRestantes > 0.5 && horasRestantes <= 1.5) {
           lembretes.push({
             whatsapp,
-            mensagem: `⏰ Em 1h: ${evento.titulo}`,
+            mensagem: `⏰ Em 1h: ${evento.titulo}${enderecoInfo}`,
             evento_id: evento.id,
             tipo: '1h'
           });

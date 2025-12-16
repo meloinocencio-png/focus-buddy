@@ -152,7 +152,7 @@ serve(async (req) => {
     const maluResponse = await processarResponse.json();
     console.log('🤖 Resposta Malu:', maluResponse);
 
-    let respostaFinal = maluResponse.resposta || 'Oi amor! 💕';
+    let respostaFinal = maluResponse.resposta || 'Olá! Precisa de algo?';
 
     // 3. Executar ação se necessário
     if (maluResponse.acao === 'criar_evento') {
@@ -162,8 +162,9 @@ serve(async (req) => {
         titulo: maluResponse.titulo,
         data: maluResponse.data,
         pessoa: maluResponse.pessoa,
+        endereco: maluResponse.endereco || null,
         lembretes: ['7d', '1d', 'hoje'],
-        usuario_id: userId // ✅ Usando usuario_id da tabela whatsapp_usuarios
+        usuario_id: userId
       };
 
       // Se tem hora, adicionar ao timestamp
@@ -179,17 +180,20 @@ serve(async (req) => {
 
       if (eventoError) {
         console.error('Erro ao criar evento:', eventoError);
-        // Tentar sem usuario_id se der erro de RLS
         const { error: retryError } = await supabase
           .from('eventos')
           .insert([{ ...eventoData }]);
         
         if (retryError) {
           console.error('Erro retry:', retryError);
-          respostaFinal = 'Ai amor, não consegui salvar isso. Tenta de novo? 😅';
+          respostaFinal = 'Não consegui salvar. Tente novamente.';
         }
       } else {
         console.log('✅ Evento criado:', evento);
+        // Adicionar endereço na resposta se existir
+        if (maluResponse.endereco) {
+          respostaFinal += `\n📍 ${maluResponse.endereco}`;
+        }
       }
     } else if (maluResponse.acao === 'consultar_agenda') {
       // Buscar eventos do período
@@ -228,17 +232,21 @@ serve(async (req) => {
           const emoji = e.tipo === 'aniversario' ? '🎂' : 
                        e.tipo === 'saude' ? '💊' :
                        e.tipo === 'tarefa' ? '📝' : '📅';
-          return `• ${emoji} ${e.titulo}${horaStr}`;
+          let item = `• ${emoji} ${e.titulo}${horaStr}`;
+          if (e.endereco) {
+            item += `\n  📍 ${e.endereco}`;
+          }
+          return item;
         }).join('\n');
 
         const periodoTexto = maluResponse.periodo === 'hoje' ? 'Hoje' :
                             maluResponse.periodo === 'amanha' ? 'Amanhã' : 'Essa semana';
 
-        respostaFinal = `${periodoTexto} você tem:\n${listaEventos}\n\nQuer que eu te lembre de algo específico? 😊`;
+        respostaFinal = `${periodoTexto} você tem:\n${listaEventos}`;
       } else {
         const periodoTexto = maluResponse.periodo === 'hoje' ? 'hoje' :
                             maluResponse.periodo === 'amanha' ? 'amanhã' : 'essa semana';
-        respostaFinal = `Você tá livre ${periodoTexto}, amor! 🎉 Aproveita pra descansar. Quer anotar alguma coisa? 💕`;
+        respostaFinal = `Você está livre ${periodoTexto}!`;
       }
     }
 
@@ -266,7 +274,7 @@ serve(async (req) => {
         mensagem_usuario: message,
         mensagem_malu: respostaFinal,
         contexto: contexto,
-        usuario_id: userId // ✅ Associar conversa ao usuário
+        usuario_id: userId
       }]);
 
     if (conversaError) {

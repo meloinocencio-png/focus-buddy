@@ -1,8 +1,9 @@
 import { Card } from "./ui/card";
-import { Calendar, User, Clock, Pencil, Trash2 } from "lucide-react";
+import { Calendar, User, Clock, Pencil, Trash2, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "./ui/button";
+import { gerarLinksNavegacao } from "@/utils/maps";
 
 interface EventCardProps {
   id: string;
@@ -11,6 +12,7 @@ interface EventCardProps {
   descricao?: string;
   data: Date;
   pessoa?: string;
+  endereco?: string;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -38,8 +40,9 @@ const tipoConfig = {
   },
 };
 
-export const EventCard = ({ id, tipo, titulo, descricao, data, pessoa, onEdit, onDelete }: EventCardProps) => {
+export const EventCard = ({ id, tipo, titulo, descricao, data, pessoa, endereco, onEdit, onDelete }: EventCardProps) => {
   const config = tipoConfig[tipo];
+  const links = endereco ? gerarLinksNavegacao(endereco) : null;
   
   return (
     <Card className={`p-4 border-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${config.className}`}>
@@ -99,6 +102,35 @@ export const EventCard = ({ id, tipo, titulo, descricao, data, pessoa, onEdit, o
               </div>
             )}
           </div>
+
+          {/* Endereço com links de navegação */}
+          {endereco && links && (
+            <div className="mt-2 flex items-start gap-2 text-sm text-muted-foreground">
+              <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div className="flex flex-col gap-1">
+                <span>{endereco}</span>
+                <div className="flex gap-2 text-xs">
+                  <a 
+                    href={links.waze}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Waze
+                  </a>
+                  <span className="text-muted-foreground/50">|</span>
+                  <a 
+                    href={links.googleMaps}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Maps
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Card>
