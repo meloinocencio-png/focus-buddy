@@ -301,6 +301,91 @@ serve(async (req) => {
 
     console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
 
+    // ═══════════════════════════════════════════════════════════
+    // VERIFICAR SE É ESCOLHA NUMÉRICA PARA AÇÃO PENDENTE
+    // ═══════════════════════════════════════════════════════════
+    const ehNumero = /^\d+$/.test(message.trim());
+    
+    if (ehNumero && contexto.length > 0) {
+      const escolhaNum = parseInt(message.trim());
+      
+      // Verificar se tem ação pendente de marcar_status
+      const acaoPendenteStatus = contexto.find((c: any) => c.acao_pendente === 'marcar_status');
+      
+      if (acaoPendenteStatus) {
+        const indice = escolhaNum - 1;
+        
+        if (indice >= 0 && indice < acaoPendenteStatus.eventos.length) {
+          const eventoId = acaoPendenteStatus.eventos[indice];
+          
+          // Buscar nome do evento
+          const { data: eventoEscolhido } = await supabase
+            .from('eventos')
+            .select('titulo')
+            .eq('id', eventoId)
+            .single();
+          
+          // Atualizar status
+          const { error: updateError } = await supabase
+            .from('eventos')
+            .update({ status: acaoPendenteStatus.novo_status })
+            .eq('id', eventoId);
+          
+          let respostaFinal: string;
+          if (updateError) {
+            console.error('Erro ao atualizar status:', updateError);
+            respostaFinal = '❌ Erro ao atualizar status.';
+          } else {
+            const statusEmoji = acaoPendenteStatus.novo_status === 'concluido' ? '✅' : '⏳';
+            const statusTexto = acaoPendenteStatus.novo_status === 'concluido' ? 'concluído' : 'pendente';
+            console.log(`✅ Status atualizado via escolha: ${eventoEscolhido?.titulo}`);
+            respostaFinal = `${statusEmoji} *${eventoEscolhido?.titulo}* marcado como ${statusTexto}!`;
+          }
+          
+          // Enviar resposta
+          await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ phone, message: respostaFinal })
+          });
+          
+          // Atualizar conversa
+          await supabase
+            .from('conversas')
+            .update({
+              mensagem_usuario: message,
+              mensagem_malu: respostaFinal,
+              contexto: []  // Limpar contexto após ação
+            })
+            .eq('id', conversaId);
+          
+          return new Response(JSON.stringify({ status: 'ok', resposta: respostaFinal }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          // Número inválido
+          const respostaFinal = '❌ Número inválido. Escolha um número da lista.';
+          
+          await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ phone, message: respostaFinal })
+          });
+          
+          await supabase
+            .from('conversas')
+            .update({ mensagem_usuario: message, mensagem_malu: respostaFinal, contexto })
+            .eq('id', conversaId);
+          
+          return new Response(JSON.stringify({ status: 'ok', resposta: respostaFinal }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      
+      // Continuar verificando outras ações pendentes (editar/cancelar existentes)
+    }
+
     // 2. Processar com a Malu (incluindo imageUrl se houver)
     const processarResponse = await fetch(
       `${supabaseUrl}/functions/v1/processar-conversa-malu`,
@@ -435,14 +520,26 @@ serve(async (req) => {
           break;
       }
 
-      const { data: eventos } = await supabase
+      // ✅ ATUALIZADO: Buscar eventos incluindo concluídos (para mostrar status)
+      const { data: eventosRaw } = await supabase
         .from('eventos')
         .select('*')
         .eq('usuario_id', userId)
-        .or('status.is.null,status.eq.pendente')
+        .neq('status', 'cancelado')  // Excluir só cancelados
         .gte('data', dataInicio.toISOString())
         .lte('data', dataFim.toISOString())
         .order('data', { ascending: true });
+      
+      let eventos = eventosRaw || [];
+      
+      // ✅ NOVO: Aplicar filtro de status se especificado
+      if (maluResponse.filtro_status) {
+        eventos = eventos.filter((e: any) => 
+          e.status === maluResponse.filtro_status || 
+          (!e.status && maluResponse.filtro_status === 'pendente')
+        );
+        console.log(`🔍 Filtrado por ${maluResponse.filtro_status}: ${eventos.length} eventos`);
+      }
 
       // Funções auxiliares para formatação TDAH-friendly
       const formatarDiaHeader = (dataStr: string, qtdEventos: number): string => {
@@ -484,15 +581,31 @@ serve(async (req) => {
           ? `${hora}h${minutos > 0 ? minutos.toString().padStart(2, '0') : ''}`
           : '';
         
-        const emoji = evento.tipo === 'aniversario' ? '🎂' : 
-                      evento.tipo === 'saude' ? '💊' :
-                      evento.tipo === 'tarefa' ? '📝' : '📅';
+        const emojiTipo = evento.tipo === 'aniversario' ? '🎂' : 
+                          evento.tipo === 'saude' ? '💊' :
+                          evento.tipo === 'tarefa' ? '📝' : '📅';
         
-        let linha = `• ${emoji} ${evento.titulo}`;
+        // ✅ NOVO: Emoji por status
+        const emojiStatus = 
+          evento.status === 'concluido' ? '✅ ' : 
+          evento.status === 'cancelado' ? '❌ ' : '';
+        
+        // Tachado para concluídos (WhatsApp: ~texto~)
+        let titulo = evento.titulo;
+        if (evento.status === 'concluido') {
+          titulo = `~${evento.titulo}~`;
+        }
+        
+        let linha = `• ${emojiStatus}${emojiTipo} ${titulo}`;
         if (horaStr) linha += ` — ${horaStr}`;
         
-        // Truncar endereço se muito longo (max 45 chars)
-        if (evento.endereco) {
+        // Status texto (para cancelados)
+        if (evento.status === 'cancelado') {
+          linha += ' _(cancelado)_';
+        }
+        
+        // Truncar endereço se muito longo (max 45 chars) - não mostrar se concluído
+        if (evento.endereco && evento.status !== 'concluido') {
           const enderecoTruncado = evento.endereco.length > 45 
             ? evento.endereco.substring(0, 42) + '...'
             : evento.endereco;
@@ -529,17 +642,39 @@ serve(async (req) => {
         
         // Footer com contador e dica
         let footer = `\n\n✨ ${eventos.length} evento${eventos.length > 1 ? 's' : ''}`;
-        if (diasPeriodo > 1) footer += ` nos próximos ${diasPeriodo} dias`;
-        if (eventos.length > 5) footer += `\n💡 Use "hoje" ou "semana" para ver menos`;
+        if (diasPeriodo > 1 && !maluResponse.filtro_status) footer += ` nos próximos ${diasPeriodo} dias`;
+        
+        // ✅ NOVO: Adicionar resumo de status (se não é consulta filtrada)
+        if (!maluResponse.filtro_status) {
+          const concluidos = eventos.filter((e: any) => e.status === 'concluido').length;
+          const pendentes = eventos.filter((e: any) => 
+            e.status !== 'concluido' && e.status !== 'cancelado'
+          ).length;
+          
+          if (concluidos > 0 || pendentes > 0) {
+            footer += `\n✅ ${concluidos} feito${concluidos === 1 ? '' : 's'} | ⏳ ${pendentes} pendente${pendentes === 1 ? '' : 's'}`;
+          }
+        }
+        
+        if (eventos.length > 5 && !maluResponse.filtro_status) {
+          footer += `\n💡 Use "hoje" ou "semana" para ver menos`;
+        }
         
         respostaFinal = `📅 *SUA AGENDA*\n\n${blocos.join(separador)}${footer}`;
       } else {
-        // Mensagem vazia com feedback positivo
-        const periodoTexto = maluResponse.periodo === 'hoje' ? 'hoje' :
-                            maluResponse.periodo === 'amanha' ? 'amanhã' :
-                            maluResponse.periodo === 'semana' ? 'essa semana' :
-                            'nos próximos 30 dias';
-        respostaFinal = `📅 *SUA AGENDA*\n\nNenhum evento ${periodoTexto}! 🎉\n\n💡 Use voz ou foto para criar.`;
+        // ✅ NOVO: Mensagens especiais para filtros vazios
+        if (maluResponse.filtro_status === 'pendente') {
+          respostaFinal = '🎉 Tudo feito! Nada pendente.';
+        } else if (maluResponse.filtro_status === 'concluido') {
+          respostaFinal = '📝 Nenhum evento concluído ainda.';
+        } else {
+          // Mensagem vazia com feedback positivo
+          const periodoTexto = maluResponse.periodo === 'hoje' ? 'hoje' :
+                              maluResponse.periodo === 'amanha' ? 'amanhã' :
+                              maluResponse.periodo === 'semana' ? 'essa semana' :
+                              'nos próximos 30 dias';
+          respostaFinal = `📅 *SUA AGENDA*\n\nNenhum evento ${periodoTexto}! 🎉\n\n💡 Use voz ou foto para criar.`;
+        }
       }
     }
     // ═══════════════════════════════════════════════════════════
@@ -1116,6 +1251,124 @@ serve(async (req) => {
           console.log(`✅ Snooze criado para ${horaStr}:`, mensagemSnooze);
           
           respostaFinal = `✅ Ok! Lembro em ${maluResponse.minutos}min (${horaStr}).`;
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: MARCAR STATUS DE EVENTO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'marcar_status') {
+      console.log('✅ Marcando status:', maluResponse.busca, '→', maluResponse.novo_status);
+      
+      if (!maluResponse.busca || !maluResponse.novo_status) {
+        respostaFinal = '❌ Especifique o evento para marcar.';
+      } else {
+        // Buscar eventos de hoje ou até 7 dias atrás (eventos recentes)
+        const seteDiasAtras = new Date();
+        seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+        seteDiasAtras.setHours(0, 0, 0, 0);
+        
+        const amanha = new Date();
+        amanha.setDate(amanha.getDate() + 1);
+        amanha.setHours(23, 59, 59, 999);
+        
+        // 1️⃣ BUSCA EXATA primeiro
+        const { data: buscaExata } = await supabase
+          .from('eventos')
+          .select('*')
+          .eq('usuario_id', userId)
+          .neq('status', 'cancelado')
+          .gte('data', seteDiasAtras.toISOString())
+          .lte('data', amanha.toISOString())
+          .ilike('titulo', `%${maluResponse.busca}%`)
+          .order('data', { ascending: false })
+          .limit(5);
+        
+        let eventosEncontrados = buscaExata || [];
+        let foiBuscaFlexivel = false;
+        
+        // 2️⃣ BUSCA FLEXÍVEL se não encontrar
+        if (eventosEncontrados.length === 0) {
+          console.log('🔍 Busca exata falhou, tentando busca flexível...');
+          
+          const palavras = (maluResponse.busca || '')
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((p: string) => p.length > 2);
+          
+          if (palavras.length > 0) {
+            const { data: todosEventos } = await supabase
+              .from('eventos')
+              .select('*')
+              .eq('usuario_id', userId)
+              .neq('status', 'cancelado')
+              .gte('data', seteDiasAtras.toISOString())
+              .lte('data', amanha.toISOString())
+              .order('data', { ascending: false });
+            
+            eventosEncontrados = (todosEventos || []).filter((evt: any) => {
+              const tituloLower = evt.titulo.toLowerCase();
+              return palavras.every((p: string) => tituloLower.includes(p));
+            });
+            
+            if (eventosEncontrados.length > 0) {
+              foiBuscaFlexivel = true;
+              console.log('✅ Busca flexível encontrou:', eventosEncontrados.length, 'eventos');
+            }
+          }
+        }
+        
+        // 3️⃣ Processar resultados
+        if (eventosEncontrados.length === 0) {
+          respostaFinal = `❌ Não encontrei "${maluResponse.busca}" nos últimos 7 dias.`;
+          
+        } else if (eventosEncontrados.length === 1) {
+          const evento = eventosEncontrados[0];
+          
+          // Atualizar status
+          const { error: updateError } = await supabase
+            .from('eventos')
+            .update({ status: maluResponse.novo_status })
+            .eq('id', evento.id);
+          
+          if (updateError) {
+            console.error('Erro ao atualizar status:', updateError);
+            respostaFinal = '❌ Erro ao atualizar status.';
+          } else {
+            const statusEmoji = maluResponse.novo_status === 'concluido' ? '✅' : '⏳';
+            const statusTexto = maluResponse.novo_status === 'concluido' ? 'concluído' : 'pendente';
+            
+            console.log(`✅ Status atualizado: ${evento.titulo} → ${maluResponse.novo_status}`);
+            respostaFinal = `${statusEmoji} *${evento.titulo}* marcado como ${statusTexto}!`;
+          }
+          
+        } else {
+          // Múltiplos eventos - listar para escolha
+          respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
+          
+          eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
+            const d = new Date(evt.data);
+            const dia = d.getDate().toString().padStart(2, '0');
+            const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+            const hora = d.getHours();
+            const min = d.getMinutes();
+            const horaStr = `${hora}h${min > 0 ? min.toString().padStart(2, '0') : ''}`;
+            
+            const emojiStatus = 
+              evt.status === 'concluido' ? '✅' : 
+              evt.status === 'cancelado' ? '❌' : '⏳';
+            
+            respostaFinal += `${idx + 1}. ${emojiStatus} ${evt.titulo} — ${dia}/${mes} às ${horaStr}\n`;
+          });
+          
+          respostaFinal += `\nQual marcar como concluído? (número)`;
+          
+          // Salvar no contexto para confirmação
+          contexto.push({
+            acao_pendente: 'marcar_status',
+            eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id),
+            novo_status: maluResponse.novo_status
+          });
         }
       }
     }
