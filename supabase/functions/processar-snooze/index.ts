@@ -14,8 +14,11 @@ serve(async (req) => {
   try {
     console.log('🔔 Processando lembretes snooze...');
     
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
+      supabaseUrl,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
@@ -39,75 +42,73 @@ serve(async (req) => {
     
     console.log(`📋 ${lembretes?.length || 0} lembretes snooze para processar`);
     
-    if (!lembretes || lembretes.length === 0) {
-      return new Response(JSON.stringify({ 
-        status: 'ok',
-        processados: 0 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // Configuração Z-API
-    const ZAPI_INSTANCE_ID = Deno.env.get('ZAPI_INSTANCE_ID');
-    const ZAPI_TOKEN = Deno.env.get('ZAPI_TOKEN');
-    const ZAPI_CLIENT_TOKEN = Deno.env.get('ZAPI_CLIENT_TOKEN');
-    
-    if (!ZAPI_INSTANCE_ID || !ZAPI_TOKEN) {
-      console.error('❌ Z-API não configurada');
-      return new Response(JSON.stringify({ error: 'Z-API não configurada' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
     let enviados = 0;
     
-    for (const lembrete of lembretes) {
-      try {
-        console.log(`📤 Enviando snooze para ${lembrete.whatsapp}: ${lembrete.mensagem}`);
-        
-        // Enviar via Z-API diretamente
-        const zapiResponse = await fetch(
-          `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text`,
-          {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Client-Token': ZAPI_CLIENT_TOKEN || ''
-            },
-            body: JSON.stringify({
-              phone: lembrete.whatsapp,
-              message: lembrete.mensagem
-            })
-          }
-        );
-        
-        if (zapiResponse.ok) {
-          // Marcar como enviado
-          await supabase
-            .from('lembretes_snooze')
-            .update({ enviado: true })
-            .eq('id', lembrete.id);
+    // Processar lembretes pendentes
+    if (lembretes && lembretes.length > 0) {
+      for (const lembrete of lembretes) {
+        try {
+          console.log(`📤 Enviando snooze para ${lembrete.whatsapp}: ${lembrete.mensagem}`);
           
-          console.log(`✅ Snooze enviado: ${lembrete.mensagem}`);
-          enviados++;
-        } else {
-          const errorText = await zapiResponse.text();
-          console.error(`❌ Erro Z-API para snooze ${lembrete.id}:`, errorText);
+          // ✅ Reutilizar enviar-whatsapp (centralizado)
+          const enviarResponse = await fetch(
+            `${supabaseUrl}/functions/v1/enviar-whatsapp`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`
+              },
+              body: JSON.stringify({
+                phone: lembrete.whatsapp,
+                message: lembrete.mensagem
+              })
+            }
+          );
+          
+          const result = await enviarResponse.json();
+          
+          if (enviarResponse.ok && result.success) {
+            // Marcar como enviado
+            await supabase
+              .from('lembretes_snooze')
+              .update({ enviado: true })
+              .eq('id', lembrete.id);
+            
+            console.log(`✅ Snooze enviado: ${lembrete.mensagem}`);
+            enviados++;
+          } else {
+            console.error(`❌ Erro ao enviar snooze ${lembrete.id}:`, result.error);
+          }
+          
+        } catch (error) {
+          console.error(`❌ Erro ao processar snooze ${lembrete.id}:`, error);
         }
-        
-      } catch (error) {
-        console.error(`❌ Erro ao processar snooze ${lembrete.id}:`, error);
       }
     }
     
-    console.log(`📨 ${enviados}/${lembretes.length} snoozes enviados`);
+    // 🧹 Limpeza automática: remover snoozes enviados há mais de 7 dias
+    const seteDiasAtras = new Date();
+    seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+    
+    const { error: deleteError, count } = await supabase
+      .from('lembretes_snooze')
+      .delete()
+      .eq('enviado', true)
+      .lt('criado_em', seteDiasAtras.toISOString());
+    
+    if (deleteError) {
+      console.error('⚠️ Erro na limpeza:', deleteError);
+    } else if (count && count > 0) {
+      console.log(`🧹 ${count} snoozes antigos limpos`);
+    }
+    
+    console.log(`📨 ${enviados}/${lembretes?.length || 0} snoozes enviados`);
     
     return new Response(JSON.stringify({ 
       status: 'ok',
       processados: enviados,
-      total: lembretes.length
+      total: lembretes?.length || 0
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
