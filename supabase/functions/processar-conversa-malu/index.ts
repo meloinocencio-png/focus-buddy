@@ -8,7 +8,7 @@ const corsHeaders = {
 interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
-        'consultar_agenda' | 'conversar' | 'atualizar_endereco';
+        'buscar_evento' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -273,6 +273,30 @@ Se contexto mostra 'confirmar_evento_encontrado' (quando Malu perguntou "Você q
 - "não", "não é", "outro" → {"acao": "conversar", "resposta": "Ok, descreva melhor o evento."}
 
 IMPORTANTE: busca deve ser palavra PRESENTE no título do evento
+
+=== BUSCAR EVENTO ESPECÍFICO ===
+
+QUANDO USAR:
+Perguntas: 'quando é [evento]', 'que dia é [evento]', 'que horas é [evento]'
+
+Formato:
+{
+  "acao": "buscar_evento",
+  "busca": "palavra-chave do evento",
+  "resposta": "🔍 Procurando [busca]..."
+}
+
+Exemplos:
+- 'quando é minha consulta?' → {"acao": "buscar_evento", "busca": "consulta"}
+- 'que dia é o aniversário do Pedro?' → {"acao": "buscar_evento", "busca": "aniversário Pedro"}
+- 'que horas é o dentista?' → {"acao": "buscar_evento", "busca": "dentista"}
+- 'quando é a reunião?' → {"acao": "buscar_evento", "busca": "reunião"}
+- 'quando é a fono?' → {"acao": "buscar_evento", "busca": "fono"}
+
+IMPORTANTE:
+- Extrair palavras-chave relevantes (substantivos, nomes)
+- NÃO incluir: 'quando', 'que', 'dia', 'horas', 'é', 'o', 'a', 'minha', 'meu'
+- Se muito vago ('quando é aquilo?') → pedir mais detalhes
 
 DATAS:
 - HOJE: ${dataHoje}
