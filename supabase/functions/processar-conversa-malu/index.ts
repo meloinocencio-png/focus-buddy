@@ -8,7 +8,8 @@ const corsHeaders = {
 interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
-        'buscar_evento' | 'snooze_lembrete' | 'consultar_agenda' | 'conversar' | 'atualizar_endereco';
+        'buscar_evento' | 'snooze_lembrete' | 'marcar_status' |  // ✅ NOVO: marcar_status
+        'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -22,6 +23,8 @@ interface MaluResponse {
   nova_data?: string;    // Para editar - nova data (YYYY-MM-DD)
   nova_hora?: string;    // Para editar - nova hora (HH:MM)
   minutos?: number;      // Para snooze - minutos para adiar
+  novo_status?: 'pendente' | 'concluido';  // ✅ NOVO: para marcar_status
+  filtro_status?: 'pendente' | 'concluido';  // ✅ NOVO: para filtrar agenda
 }
 
 serve(async (req) => {
@@ -328,6 +331,59 @@ Exemplos:
 - 'daqui 30 minutos' → {"acao": "snooze_lembrete", "minutos": 30}
 - 'em 1 hora' → {"acao": "snooze_lembrete", "minutos": 60}
 - 'meia hora' → {"acao": "snooze_lembrete", "minutos": 30}
+
+=== MARCAR STATUS DE EVENTO ===
+
+QUANDO USAR:
+Comandos: 'marca [evento] como feito', 'marcar [evento] concluído', '[evento] foi feito', 
+          '[evento] está feito', '[evento] pronto', 'acabou [evento]', 'terminei [evento]'
+
+Formato:
+{
+  "acao": "marcar_status",
+  "busca": "palavra-chave do evento",
+  "novo_status": "concluido",
+  "resposta": "🔍 Procurando [evento]..."
+}
+
+Exemplos:
+- 'marca dentista como feito' → {"acao": "marcar_status", "busca": "dentista", "novo_status": "concluido"}
+- 'dentista foi feito' → {"acao": "marcar_status", "busca": "dentista", "novo_status": "concluido"}
+- 'marcar reunião concluída' → {"acao": "marcar_status", "busca": "reunião", "novo_status": "concluido"}
+- 'acabou o treino' → {"acao": "marcar_status", "busca": "treino", "novo_status": "concluido"}
+- 'terminei a consulta' → {"acao": "marcar_status", "busca": "consulta", "novo_status": "concluido"}
+
+IMPORTANTE:
+- Buscar eventos de HOJE ou eventos recentes (até 7 dias atrás)
+- Só marcar como concluído eventos que já passaram ou são de hoje
+- Se múltiplos eventos, listar para escolha
+
+=== FILTRAR AGENDA POR STATUS ===
+
+VER O QUE FALTA FAZER:
+Comandos: 'o que falta fazer hoje', 'mostra pendentes', 'o que ainda não fiz', 'o que preciso fazer'
+
+{
+  "acao": "consultar_agenda",
+  "periodo": "hoje",
+  "filtro_status": "pendente",
+  "resposta": "📋 O que falta fazer..."
+}
+
+VER O QUE JÁ FEZ:
+Comandos: 'o que eu fiz hoje', 'mostra concluídos', 'o que já fiz', 'o que completei'
+
+{
+  "acao": "consultar_agenda",
+  "periodo": "hoje",
+  "filtro_status": "concluido",
+  "resposta": "✅ O que você fez hoje..."
+}
+
+Exemplos:
+- 'o que falta fazer?' → {"acao": "consultar_agenda", "periodo": "hoje", "filtro_status": "pendente"}
+- 'o que eu fiz hoje?' → {"acao": "consultar_agenda", "periodo": "hoje", "filtro_status": "concluido"}
+- 'mostra só pendentes' → {"acao": "consultar_agenda", "periodo": "todos", "filtro_status": "pendente"}
 
 DATAS:
 - HOJE: ${dataHoje}
