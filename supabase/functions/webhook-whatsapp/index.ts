@@ -37,6 +37,14 @@ serve(async (req) => {
     // === LOG COMPLETO DO PAYLOAD (DEBUG CRÍTICO) ===
     console.log('📦 PAYLOAD COMPLETO:', JSON.stringify(payload, null, 2));
 
+    // === EXTRAIR messageId ÚNICO DO Z-API (CRÍTICO para evitar duplicatas) ===
+    let zapiMessageId = payload.messageId || payload.key?.id;
+    if (!zapiMessageId || zapiMessageId === 'null' || zapiMessageId === 'undefined') {
+      console.warn('⚠️ messageId ausente, gerando fallback');
+      zapiMessageId = `fallback-${payload.phone || 'unknown'}-${Date.now()}`;
+    }
+    console.log('🆔 Z-API Message ID:', zapiMessageId);
+
     // Z-API pode enviar diferentes formatos de payload
     // Extrair número e mensagem
     let phone = payload.phone || payload.from || payload.sender?.id;
@@ -167,25 +175,25 @@ serve(async (req) => {
       });
     }
 
-    // Verificar se já processamos esta mensagem recentemente (últimos 60 segundos)
-    // Para imagens, usar hash da URL como identificador
-    const messageId = imageUrl ? `IMG:${imageUrl.slice(-50)}` : message;
-    
-    const { data: mensagemExistente } = await supabase
+    // === VERIFICAÇÃO DE DUPLICATA USANDO messageId DO Z-API (CRÍTICO) ===
+    const { data: jaProcessado } = await supabase
       .from('conversas')
       .select('id')
-      .eq('whatsapp_de', phone)
-      .eq('mensagem_usuario', messageId)
-      .gte('criada_em', new Date(Date.now() - 60 * 1000).toISOString())
-      .limit(1)
+      .eq('zapi_message_id', zapiMessageId)
       .maybeSingle();
 
-    if (mensagemExistente) {
-      console.log('⏭️ Mensagem duplicada ignorada (já processada nos últimos 60s)');
-      return new Response(JSON.stringify({ status: 'duplicate_ignored' }), {
+    if (jaProcessado) {
+      console.log('⏭️ Mensagem já processada (messageId:', zapiMessageId, ')');
+      return new Response(JSON.stringify({ 
+        status: 'already_processed',
+        message_id: zapiMessageId 
+      }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    console.log('✅ Nova mensagem, processando...');
 
     console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}${imageUrl ? ' [+imagem]' : ''}`);
 
@@ -383,8 +391,8 @@ serve(async (req) => {
     const enviarResult = await enviarResponse.json();
     console.log('📤 Resultado envio:', enviarResult);
 
-    // 5. Salvar conversa no banco (para imagens, salvar identificador)
-    const mensagemParaSalvar = imageUrl ? `IMG:${imageUrl.slice(-50)}` : message;
+    // 5. Salvar conversa no banco COM zapi_message_id (evita duplicatas)
+    const mensagemParaSalvar = imageUrl ? `${imageCaption || 'Imagem'} [+imagem]` : message;
     
     const { error: conversaError } = await supabase
       .from('conversas')
@@ -393,8 +401,18 @@ serve(async (req) => {
         mensagem_usuario: mensagemParaSalvar,
         mensagem_malu: respostaFinal,
         contexto: contexto,
-        usuario_id: userId
+        usuario_id: userId,
+        zapi_message_id: zapiMessageId  // ✅ Identificador único do Z-API
       }]);
+
+    // Se der erro de UNIQUE constraint, é duplicata (race condition catch)
+    if (conversaError?.code === '23505') {
+      console.log('⏭️ Duplicata detectada via unique constraint:', zapiMessageId);
+      return new Response(JSON.stringify({ status: 'duplicate_constraint' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     if (conversaError) {
       console.error('Erro ao salvar conversa:', conversaError);
