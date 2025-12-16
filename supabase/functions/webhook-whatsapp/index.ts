@@ -466,7 +466,7 @@ serve(async (req) => {
       }
     }
     // ═══════════════════════════════════════════════════════════
-    // HANDLER: EDITAR EVENTO
+    // HANDLER: EDITAR EVENTO (com busca flexível)
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'editar_evento') {
       console.log('✏️ Buscando para editar:', maluResponse.busca);
@@ -474,7 +474,8 @@ serve(async (req) => {
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() + 30);
       
-      const { data: eventosEncontrados } = await supabase
+      // 1️⃣ BUSCA EXATA primeiro
+      const { data: buscaExata } = await supabase
         .from('eventos')
         .select('*')
         .eq('usuario_id', userId)
@@ -485,48 +486,99 @@ serve(async (req) => {
         .order('data', { ascending: true })
         .limit(5);
       
-      if (!eventosEncontrados || eventosEncontrados.length === 0) {
+      let eventosEncontrados = buscaExata || [];
+      let foiBuscaFlexivel = false;
+      
+      // 2️⃣ Se não encontrou, BUSCA FLEXÍVEL por palavras
+      if (eventosEncontrados.length === 0) {
+        console.log('🔍 Busca exata falhou, tentando busca flexível...');
+        
+        const palavras = (maluResponse.busca || '')
+          .toLowerCase()
+          .split(' ')
+          .filter((p: string) => p.length > 2); // Ignorar palavras curtas
+        
+        if (palavras.length > 0) {
+          // Buscar todos eventos e filtrar no código
+          const { data: todosEventos } = await supabase
+            .from('eventos')
+            .select('*')
+            .eq('usuario_id', userId)
+            .or('status.is.null,status.eq.pendente')
+            .gte('data', new Date().toISOString())
+            .lte('data', dataLimite.toISOString())
+            .order('data', { ascending: true });
+          
+          // Filtrar eventos que contêm TODAS as palavras
+          eventosEncontrados = (todosEventos || []).filter((evento: any) => {
+            const tituloLower = evento.titulo.toLowerCase();
+            return palavras.every((palavra: string) => tituloLower.includes(palavra));
+          });
+          
+          if (eventosEncontrados.length > 0) {
+            foiBuscaFlexivel = true;
+            console.log('✅ Busca flexível encontrou:', eventosEncontrados.length, 'eventos');
+          }
+        }
+      }
+      
+      // 3️⃣ Processar resultados
+      if (eventosEncontrados.length === 0) {
         respostaFinal = `❌ Não encontrei "${maluResponse.busca}" nos próximos 30 dias.`;
         
       } else if (eventosEncontrados.length === 1) {
-        // Único evento - pedir confirmação
         const evento = eventosEncontrados[0];
-        const dataEvento = new Date(evento.data);
-        const dataAtual = `${dataEvento.getDate().toString().padStart(2, '0')}/${(dataEvento.getMonth() + 1).toString().padStart(2, '0')}`;
-        const horaAtual = `${dataEvento.getHours()}h${dataEvento.getMinutes() > 0 ? dataEvento.getMinutes().toString().padStart(2, '0') : ''}`;
+        const d = new Date(evento.data);
+        const dataF = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        const horaF = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
         
-        respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${dataAtual} às ${horaAtual}\n\n`;
-        
-        if (maluResponse.nova_data || maluResponse.nova_hora) {
-          respostaFinal += `✏️ Mudar para:\n`;
+        if (foiBuscaFlexivel) {
+          // 🔍 PERGUNTAR se é o evento certo antes de mostrar edição
+          respostaFinal = `🔍 Você quis dizer *${evento.titulo}* (${dataF} às ${horaF})?`;
           
-          if (maluResponse.nova_data) {
-            const nd = new Date(maluResponse.nova_data);
-            respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
-          }
-          
-          if (maluResponse.nova_hora) {
-            const [h, m] = maluResponse.nova_hora.split(':');
-            respostaFinal += `• Hora: ${h}h${m !== '00' ? m : ''}\n`;
-          }
-          
-          respostaFinal += `\nConfirma?`;
-          
-          // Salvar no contexto
+          // Salvar no contexto para confirmar depois
           contexto.push({
-            acao_pendente: 'editar',
+            acao_pendente: 'confirmar_evento_encontrado',
+            proxima_acao: 'editar',
             evento_id: evento.id,
             nova_data: maluResponse.nova_data,
             nova_hora: maluResponse.nova_hora
           });
+          
         } else {
-          respostaFinal = '❌ Especifique nova data ou hora.';
+          // Busca exata - mostrar confirmação de edição direto
+          respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${dataF} às ${horaF}\n\n`;
+          
+          if (maluResponse.nova_data || maluResponse.nova_hora) {
+            respostaFinal += `✏️ Mudar para:\n`;
+            
+            if (maluResponse.nova_data) {
+              const nd = new Date(maluResponse.nova_data);
+              respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
+            }
+            
+            if (maluResponse.nova_hora) {
+              const [h, m] = maluResponse.nova_hora.split(':');
+              respostaFinal += `• Hora: ${h}h${m !== '00' ? m : ''}\n`;
+            }
+            
+            respostaFinal += `\nConfirma?`;
+            
+            contexto.push({
+              acao_pendente: 'editar',
+              evento_id: evento.id,
+              nova_data: maluResponse.nova_data,
+              nova_hora: maluResponse.nova_hora
+            });
+          } else {
+            respostaFinal = '❌ Especifique nova data ou hora.';
+          }
         }
         
       } else {
         // Múltiplos eventos - listar para escolha
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
-        eventosEncontrados.forEach((evt: any, idx: number) => {
+        eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
           const d = new Date(evt.data);
           const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
           const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
@@ -534,10 +586,9 @@ serve(async (req) => {
         });
         respostaFinal += `\nQual editar? (número)`;
         
-        // Salvar lista no contexto para escolha
         contexto.push({
           acao_pendente: 'escolher_editar',
-          eventos: eventosEncontrados.map((e: any) => e.id),
+          eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id),
           nova_data: maluResponse.nova_data,
           nova_hora: maluResponse.nova_hora
         });
@@ -593,7 +644,7 @@ serve(async (req) => {
       }
     }
     // ═══════════════════════════════════════════════════════════
-    // HANDLER: CANCELAR EVENTO
+    // HANDLER: CANCELAR EVENTO (com busca flexível)
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'cancelar_evento') {
       console.log('❌ Buscando para cancelar:', maluResponse.busca);
@@ -601,7 +652,8 @@ serve(async (req) => {
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() + 30);
       
-      const { data: eventosEncontrados } = await supabase
+      // 1️⃣ BUSCA EXATA primeiro
+      const { data: buscaExata } = await supabase
         .from('eventos')
         .select('*')
         .eq('usuario_id', userId)
@@ -612,7 +664,42 @@ serve(async (req) => {
         .order('data', { ascending: true })
         .limit(5);
       
-      if (!eventosEncontrados || eventosEncontrados.length === 0) {
+      let eventosEncontrados = buscaExata || [];
+      let foiBuscaFlexivel = false;
+      
+      // 2️⃣ Se não encontrou, BUSCA FLEXÍVEL por palavras
+      if (eventosEncontrados.length === 0) {
+        console.log('🔍 Busca exata falhou, tentando busca flexível...');
+        
+        const palavras = (maluResponse.busca || '')
+          .toLowerCase()
+          .split(' ')
+          .filter((p: string) => p.length > 2);
+        
+        if (palavras.length > 0) {
+          const { data: todosEventos } = await supabase
+            .from('eventos')
+            .select('*')
+            .eq('usuario_id', userId)
+            .or('status.is.null,status.eq.pendente')
+            .gte('data', new Date().toISOString())
+            .lte('data', dataLimite.toISOString())
+            .order('data', { ascending: true });
+          
+          eventosEncontrados = (todosEventos || []).filter((evento: any) => {
+            const tituloLower = evento.titulo.toLowerCase();
+            return palavras.every((palavra: string) => tituloLower.includes(palavra));
+          });
+          
+          if (eventosEncontrados.length > 0) {
+            foiBuscaFlexivel = true;
+            console.log('✅ Busca flexível encontrou:', eventosEncontrados.length, 'eventos');
+          }
+        }
+      }
+      
+      // 3️⃣ Processar resultados
+      if (eventosEncontrados.length === 0) {
         respostaFinal = `❌ Não encontrei "${maluResponse.busca}" para cancelar.`;
         
       } else if (eventosEncontrados.length === 1) {
@@ -621,16 +708,29 @@ serve(async (req) => {
         const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
         const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
         
-        respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
-        
-        contexto.push({
-          acao_pendente: 'cancelar',
-          evento_id: evento.id
-        });
+        if (foiBuscaFlexivel) {
+          // 🔍 PERGUNTAR se é o evento certo
+          respostaFinal = `🔍 Você quis dizer *${evento.titulo}* (${df} às ${hf})?`;
+          
+          contexto.push({
+            acao_pendente: 'confirmar_evento_encontrado',
+            proxima_acao: 'cancelar',
+            evento_id: evento.id
+          });
+          
+        } else {
+          // Busca exata - mostrar confirmação de cancelamento direto
+          respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
+          
+          contexto.push({
+            acao_pendente: 'cancelar',
+            evento_id: evento.id
+          });
+        }
         
       } else {
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
-        eventosEncontrados.forEach((evt: any, idx: number) => {
+        eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
           const d = new Date(evt.data);
           const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
           const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
@@ -640,8 +740,65 @@ serve(async (req) => {
         
         contexto.push({
           acao_pendente: 'escolher_cancelar',
-          eventos: eventosEncontrados.map((e: any) => e.id)
+          eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id)
         });
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: CONFIRMAR SUGESTÃO DE EVENTO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'confirmar_sugestao') {
+      const acaoPendente = contexto.find((c: any) => c.acao_pendente === 'confirmar_evento_encontrado');
+      
+      if (!acaoPendente) {
+        respostaFinal = '❌ Não há sugestão pendente.';
+      } else {
+        // Buscar evento
+        const { data: evento } = await supabase
+          .from('eventos')
+          .select('*')
+          .eq('id', acaoPendente.evento_id)
+          .single();
+        
+        if (!evento) {
+          respostaFinal = '❌ Evento não encontrado.';
+        } else {
+          const d = new Date(evento.data);
+          const dataF = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+          const horaF = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+          
+          if (acaoPendente.proxima_acao === 'editar') {
+            // Mostrar confirmação de edição
+            respostaFinal = `📋 *${evento.titulo}*\n• ${dataF} às ${horaF}\n\n✏️ Mudar para:\n`;
+            
+            if (acaoPendente.nova_data) {
+              const nd = new Date(acaoPendente.nova_data);
+              respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
+            }
+            if (acaoPendente.nova_hora) {
+              const [h, m] = acaoPendente.nova_hora.split(':');
+              respostaFinal += `• Hora: ${h}h${m !== '00' ? m : ''}\n`;
+            }
+            respostaFinal += `\nConfirma?`;
+            
+            // Atualizar contexto para edição
+            contexto.push({
+              acao_pendente: 'editar',
+              evento_id: acaoPendente.evento_id,
+              nova_data: acaoPendente.nova_data,
+              nova_hora: acaoPendente.nova_hora
+            });
+            
+          } else if (acaoPendente.proxima_acao === 'cancelar') {
+            // Mostrar confirmação de cancelamento
+            respostaFinal = `📋 *${evento.titulo}*\n• ${dataF} às ${horaF}\n\n❌ Confirma cancelamento?`;
+            
+            contexto.push({
+              acao_pendente: 'cancelar',
+              evento_id: acaoPendente.evento_id
+            });
+          }
+        }
       }
     }
     // ═══════════════════════════════════════════════════════════

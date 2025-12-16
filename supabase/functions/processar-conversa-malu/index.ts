@@ -7,8 +7,8 @@ const corsHeaders = {
 
 interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
-        'confirmar_edicao' | 'confirmar_cancelamento' | 'consultar_agenda' | 
-        'conversar' | 'atualizar_endereco';
+        'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
+        'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
   titulo?: string;
@@ -266,6 +266,11 @@ Se contexto mostra ação pendente de editar ou cancelar:
 - "sim", "confirma", "pode", "isso" → {"acao": "confirmar_edicao"} ou {"acao": "confirmar_cancelamento"}
 - "não", "cancela", "deixa" → {"acao": "conversar", "resposta": "Ok, mantido!"}
 - Escolha por número: "1", "2" → confirmar com evento selecionado
+
+CONFIRMAÇÃO DE EVENTO SUGERIDO:
+Se contexto mostra 'confirmar_evento_encontrado' (quando Malu perguntou "Você quis dizer X?"):
+- "sim", "isso", "esse", "é esse" → {"acao": "confirmar_sugestao"}
+- "não", "não é", "outro" → {"acao": "conversar", "resposta": "Ok, descreva melhor o evento."}
 
 IMPORTANTE: busca deve ser palavra PRESENTE no título do evento
 
