@@ -22,6 +22,83 @@ async function getUserIdFromWhatsApp(supabase: any, phone: string): Promise<stri
   return data.usuario_id;
 }
 
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO AUXILIAR: Buscar eventos (exata + flexível)
+// ═══════════════════════════════════════════════════════════
+async function buscarEventos(
+  supabase: any,
+  userId: string,
+  termoBusca: string,
+  diasFuturos: number = 30
+): Promise<{ eventos: any[]; foiBuscaFlexivel: boolean }> {
+  
+  console.log(`🔍 Buscando "${termoBusca}" nos próximos ${diasFuturos} dias`);
+  
+  const dataLimite = new Date();
+  dataLimite.setDate(dataLimite.getDate() + diasFuturos);
+  
+  // IMPORTANTE: Buscar desde HOJE 00:00 (não desde agora)
+  const hojeInicio = new Date();
+  hojeInicio.setHours(0, 0, 0, 0);
+  
+  // ───────────────────────────────────────────────────────────
+  // ESTRATÉGIA 1: BUSCA EXATA (substring)
+  // ───────────────────────────────────────────────────────────
+  const { data: buscaExata } = await supabase
+    .from('eventos')
+    .select('*')
+    .eq('usuario_id', userId)
+    .or('status.is.null,status.eq.pendente')
+    .gte('data', hojeInicio.toISOString())
+    .lte('data', dataLimite.toISOString())
+    .ilike('titulo', `%${termoBusca}%`)
+    .order('data', { ascending: true })
+    .limit(10);
+  
+  if (buscaExata && buscaExata.length > 0) {
+    console.log(`✅ Encontrou ${buscaExata.length} com busca exata`);
+    return { eventos: buscaExata, foiBuscaFlexivel: false };
+  }
+  
+  // ───────────────────────────────────────────────────────────
+  // ESTRATÉGIA 2: BUSCA FLEXÍVEL (por palavras - AND)
+  // ───────────────────────────────────────────────────────────
+  const palavras = termoBusca
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter((p: string) => p.length > 2);
+  
+  if (palavras.length === 0) {
+    console.log('⚠️ Nenhuma palavra válida para busca flexível');
+    return { eventos: [], foiBuscaFlexivel: false };
+  }
+  
+  console.log(`🔍 Busca flexível com palavras: ${palavras.join(', ')}`);
+  
+  // Buscar todos eventos e filtrar por palavras (AND)
+  const { data: todosEventos } = await supabase
+    .from('eventos')
+    .select('*')
+    .eq('usuario_id', userId)
+    .or('status.is.null,status.eq.pendente')
+    .gte('data', hojeInicio.toISOString())
+    .lte('data', dataLimite.toISOString())
+    .order('data', { ascending: true });
+  
+  const eventosFlexiveis = (todosEventos || []).filter((evento: any) => {
+    const tituloLower = evento.titulo.toLowerCase();
+    return palavras.every((palavra: string) => tituloLower.includes(palavra));
+  });
+  
+  console.log(`${eventosFlexiveis.length > 0 ? '✅' : '❌'} Encontrou ${eventosFlexiveis.length} com busca flexível`);
+  
+  return { 
+    eventos: eventosFlexiveis.slice(0, 10), 
+    foiBuscaFlexivel: true 
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -822,6 +899,125 @@ serve(async (req) => {
         } else {
           console.log('✅ Evento cancelado:', acaoPendente.evento_id);
           respostaFinal = '✅ Evento cancelado!';
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: BUSCAR EVENTO ESPECÍFICO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'buscar_evento') {
+      console.log('🔍 Ação: buscar_evento');
+      
+      if (!maluResponse.busca) {
+        respostaFinal = '❌ Me diga o que está procurando.';
+      } else {
+        const { eventos } = await buscarEventos(
+          supabase,
+          userId,
+          maluResponse.busca,
+          90  // Buscar até 90 dias
+        );
+        
+        if (eventos.length === 0) {
+          respostaFinal = `❌ Não encontrei "${maluResponse.busca}" nos próximos 90 dias.`;
+          
+        } else if (eventos.length === 1) {
+          // ═══════════════════════════════════════════════════════
+          // ÚNICO EVENTO - Resposta detalhada
+          // ═══════════════════════════════════════════════════════
+          const evento = eventos[0];
+          const d = new Date(evento.data);
+          
+          // Dia da semana
+          const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+          const diaSemana = diasSemana[d.getDay()];
+          
+          // Data formatada
+          const dia = d.getDate().toString().padStart(2, '0');
+          const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+          const hora = d.getHours();
+          const min = d.getMinutes();
+          const horaStr = `${hora}h${min > 0 ? min.toString().padStart(2, '0') : ''}`;
+          
+          // Emoji por tipo
+          const emoji = 
+            evento.tipo === 'aniversario' ? '🎂' : 
+            evento.tipo === 'saude' ? '💊' :
+            evento.tipo === 'tarefa' ? '📝' : '📅';
+          
+          // Calcular dias restantes
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const eventoDia = new Date(d);
+          eventoDia.setHours(0, 0, 0, 0);
+          const diasRestantes = Math.ceil(
+            (eventoDia.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          let relativo = '';
+          if (diasRestantes === 0) relativo = ' ⚡ HOJE!';
+          else if (diasRestantes === 1) relativo = ' 🔔 AMANHÃ';
+          else if (diasRestantes > 1 && diasRestantes <= 7) relativo = ` (em ${diasRestantes} dias)`;
+          
+          // Montar resposta
+          respostaFinal = `${emoji} *${evento.titulo}*\n`;
+          respostaFinal += `📅 ${diaSemana} ${dia}/${mes} às ${horaStr}${relativo}`;
+          
+          // Adicionar endereço se existir
+          if (evento.endereco) {
+            const enderecoTruncado = evento.endereco.length > 45 
+              ? evento.endereco.substring(0, 42) + '...'
+              : evento.endereco;
+            respostaFinal += `\n📍 ${enderecoTruncado}`;
+          }
+          
+        } else if (eventos.length <= 3) {
+          // ═══════════════════════════════════════════════════════
+          // 2-3 EVENTOS - Lista resumida com detalhes
+          // ═══════════════════════════════════════════════════════
+          respostaFinal = `📋 Encontrei ${eventos.length} eventos:\n\n`;
+          
+          eventos.forEach((evt: any) => {
+            const d = new Date(evt.data);
+            const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const diaSemana = diasSemana[d.getDay()];
+            const dia = d.getDate().toString().padStart(2, '0');
+            const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+            const hora = d.getHours();
+            const min = d.getMinutes();
+            const horaStr = `${hora}h${min > 0 ? min.toString().padStart(2, '0') : ''}`;
+            
+            const emoji = 
+              evt.tipo === 'aniversario' ? '🎂' : 
+              evt.tipo === 'saude' ? '💊' :
+              evt.tipo === 'tarefa' ? '📝' : '📅';
+            
+            respostaFinal += `${emoji} *${evt.titulo}*\n`;
+            respostaFinal += `   ${diaSemana} ${dia}/${mes} às ${horaStr}\n\n`;
+          });
+          
+        } else {
+          // ═══════════════════════════════════════════════════════
+          // 4+ EVENTOS - Lista compacta (máx 5)
+          // ═══════════════════════════════════════════════════════
+          respostaFinal = `📋 Encontrei ${eventos.length} eventos:\n\n`;
+          
+          eventos.slice(0, 5).forEach((evt: any, idx: number) => {
+            const d = new Date(evt.data);
+            const dia = d.getDate().toString().padStart(2, '0');
+            const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+            const hora = d.getHours();
+            const min = d.getMinutes();
+            const horaStr = `${hora}h${min > 0 ? min.toString().padStart(2, '0') : ''}`;
+            
+            respostaFinal += `${idx + 1}. ${evt.titulo} — ${dia}/${mes} às ${horaStr}\n`;
+          });
+          
+          if (eventos.length > 5) {
+            respostaFinal += `\n... e mais ${eventos.length - 5}`;
+          }
+          
+          respostaFinal += `\n\n💡 Use "agenda semana" para ver detalhes`;
         }
       }
     }
