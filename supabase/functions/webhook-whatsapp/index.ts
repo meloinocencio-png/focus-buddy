@@ -339,11 +339,17 @@ serve(async (req) => {
         case 'semana':
           dataFim.setDate(dataFim.getDate() + 7);
           break;
+        case 'todos':
+        default:
+          // Buscar próximos 12 meses
+          dataFim.setFullYear(dataFim.getFullYear() + 1);
+          break;
       }
 
       const { data: eventos } = await supabase
         .from('eventos')
         .select('*')
+        .eq('usuario_id', userId)  // ✅ CRÍTICO: Filtrar por usuário!
         .gte('data', dataInicio.toISOString())
         .lte('data', dataFim.toISOString())
         .order('data', { ascending: true });
@@ -365,12 +371,16 @@ serve(async (req) => {
         }).join('\n');
 
         const periodoTexto = maluResponse.periodo === 'hoje' ? 'Hoje' :
-                            maluResponse.periodo === 'amanha' ? 'Amanhã' : 'Essa semana';
+                            maluResponse.periodo === 'amanha' ? 'Amanhã' :
+                            maluResponse.periodo === 'semana' ? 'Essa semana' :
+                            '📅 Sua agenda';
 
         respostaFinal = `${periodoTexto} você tem:\n${listaEventos}`;
       } else {
         const periodoTexto = maluResponse.periodo === 'hoje' ? 'hoje' :
-                            maluResponse.periodo === 'amanha' ? 'amanhã' : 'essa semana';
+                            maluResponse.periodo === 'amanha' ? 'amanhã' :
+                            maluResponse.periodo === 'semana' ? 'essa semana' :
+                            'nos próximos meses';
         respostaFinal = `Você está livre ${periodoTexto}!`;
       }
     }

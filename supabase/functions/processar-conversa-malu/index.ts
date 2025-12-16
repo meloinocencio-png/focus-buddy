@@ -14,7 +14,7 @@ interface MaluResponse {
   hora?: string;
   pessoa?: string;
   endereco?: string;
-  periodo?: 'hoje' | 'amanha' | 'semana';
+  periodo?: 'hoje' | 'amanha' | 'semana' | 'todos';  // ✅ Adicionado 'todos'
   checklist?: string[];
 }
 
@@ -162,11 +162,17 @@ Quando receber uma imagem, você DEVE:
 
 PARA CONVITES DE ANIVERSÁRIO/FESTA:
 - Extrair NOME da pessoa/criança (busque palavras em destaque)
-- Extrair DATA COMPLETA (dia e mês, assumir próximo ano se necessário)  
+- Extrair DATA COMPLETA (dia e mês)
 - Extrair HORÁRIO EXATO (ex: "13 HORAS" = 13:00, "15H" = 15:00)
 - Extrair ENDEREÇO COMPLETO (rua, número, bairro, cidade)
 - Tipo: "aniversario"
 - Gerar checklist: ["Presente comprado?", "Cartão/mensagem", "Endereço confirmado?"]
+
+⚠️ REGRA CRÍTICA DE DATAS - NUNCA CRIAR EVENTOS NO PASSADO:
+- Data de hoje: ${dataHoje}
+- Se a data extraída JÁ PASSOU neste ano → usar PRÓXIMO ANO
+- Exemplo: Hoje é 16/12/2025 e convite diz "09/12" → usar 09/12/2026
+- Aniversários e eventos SEMPRE devem ter datas futuras!
 
 FORMATO OBRIGATÓRIO PARA IMAGEM DE CONVITE:
 {
@@ -196,8 +202,12 @@ SE NÃO CONSEGUIR LER A IMAGEM:
 Para consultar agenda:
 {
   "acao": "consultar_agenda",
-  "periodo": "hoje|amanha|semana",
+  "periodo": "hoje|amanha|semana|todos",
   "resposta": "Verificando..."
+
+IMPORTANTE - QUANDO USAR "todos":
+- "minha agenda", "meus compromissos", "o que tenho", "todos eventos" → periodo: "todos"
+- "me mostra tudo", "lista tudo", "agenda completa" → periodo: "todos"
 }
 
 Para conversa casual:
