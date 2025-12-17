@@ -302,6 +302,16 @@ serve(async (req) => {
     console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
 
     // ═══════════════════════════════════════════════════════════
+    // CARREGAR LOCAIS FAVORITOS DO USUÁRIO
+    // ═══════════════════════════════════════════════════════════
+    const { data: locaisFavoritos } = await supabase
+      .from('locais_favoritos')
+      .select('apelido, endereco')
+      .eq('usuario_id', userId);
+
+    console.log(`📍 ${locaisFavoritos?.length || 0} locais favoritos carregados`);
+
+    // ═══════════════════════════════════════════════════════════
     // VERIFICAR SE É ESCOLHA NUMÉRICA PARA AÇÃO PENDENTE
     // ═══════════════════════════════════════════════════════════
     const ehNumero = /^\d+$/.test(message.trim());
@@ -386,6 +396,19 @@ serve(async (req) => {
       // Continuar verificando outras ações pendentes (editar/cancelar existentes)
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // PASSAR LOCAIS FAVORITOS NO CONTEXTO (como texto formatado)
+    // ═══════════════════════════════════════════════════════════
+    if (locaisFavoritos && locaisFavoritos.length > 0) {
+      const locaisTexto = 'LOCAIS SALVOS (use ao criar eventos):\n' +
+        locaisFavoritos.map((l: any) => `- "${l.apelido}": ${l.endereco}`).join('\n');
+      
+      contexto.push({
+        role: 'system',
+        content: locaisTexto
+      });
+    }
+
     // 2. Processar com a Malu (incluindo imageUrl se houver)
     const processarResponse = await fetch(
       `${supabaseUrl}/functions/v1/processar-conversa-malu`,
@@ -410,13 +433,39 @@ serve(async (req) => {
 
     // 3. Executar ação se necessário
     if (maluResponse.acao === 'criar_evento') {
+      // ═══════════════════════════════════════════════════════════
+      // SUBSTITUIR APELIDO DE LOCAL POR ENDEREÇO COMPLETO
+      // ═══════════════════════════════════════════════════════════
+      let enderecoFinal = maluResponse.endereco || null;
+      
+      if (enderecoFinal && locaisFavoritos && locaisFavoritos.length > 0) {
+        const enderecoLower = enderecoFinal.toLowerCase();
+        
+        // Busca inteligente: exata > includes
+        let localMatch = locaisFavoritos.find((l: any) => 
+          enderecoLower === l.apelido.toLowerCase()
+        );
+        
+        if (!localMatch) {
+          localMatch = locaisFavoritos.find((l: any) => 
+            enderecoLower.includes(l.apelido.toLowerCase()) ||
+            enderecoLower.includes(`na ${l.apelido.toLowerCase()}`)
+          );
+        }
+        
+        if (localMatch) {
+          console.log(`📍 Substituindo "${enderecoFinal}" → "${localMatch.endereco}"`);
+          enderecoFinal = localMatch.endereco;
+        }
+      }
+      
       // Criar evento no banco
       const eventoData: any = {
         tipo: maluResponse.tipo || 'compromisso',
         titulo: maluResponse.titulo,
         data: maluResponse.data,
         pessoa: maluResponse.pessoa,
-        endereco: maluResponse.endereco || null,
+        endereco: enderecoFinal,  // ✅ Usar endereço substituído
         lembretes: ['7d', '1d', 'hoje'],
         usuario_id: userId,
         checklist: maluResponse.checklist || []
@@ -446,8 +495,8 @@ serve(async (req) => {
       } else {
         console.log('✅ Evento criado:', evento);
         // Adicionar endereço na resposta se existir
-        if (maluResponse.endereco) {
-          respostaFinal += `\n📍 ${maluResponse.endereco}`;
+        if (enderecoFinal) {
+          respostaFinal += `\n📍 ${enderecoFinal}`;
         } else {
           // Perguntar sobre endereço se não tem
           respostaFinal += '\n📍 Quer adicionar o endereço?';
@@ -1369,6 +1418,123 @@ serve(async (req) => {
             eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id),
             novo_status: maluResponse.novo_status
           });
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: SALVAR LOCAL FAVORITO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'salvar_local') {
+      console.log('📍 Salvando local:', maluResponse.apelido);
+      
+      // Validações básicas
+      if (!maluResponse.apelido || !maluResponse.endereco) {
+        respostaFinal = '❌ Especifique apelido e endereço.\nEx: "salva Clínica como Rua XV 500"';
+      } else if (maluResponse.apelido.length < 2) {
+        respostaFinal = '❌ Apelido muito curto (mínimo 2 caracteres)';
+      } else if (maluResponse.endereco.length < 5) {
+        respostaFinal = '❌ Endereço muito curto (mínimo 5 caracteres)';
+      } else {
+        const apelidoNormalizado = maluResponse.apelido.toLowerCase().trim().substring(0, 50);
+        const enderecoLimpo = maluResponse.endereco.trim().substring(0, 200);
+        
+        // Verificar se já existe (upsert)
+        const { data: existing } = await supabase
+          .from('locais_favoritos')
+          .select('id')
+          .eq('usuario_id', userId)
+          .ilike('apelido', apelidoNormalizado)
+          .maybeSingle();
+        
+        if (existing) {
+          // Atualizar existente
+          const { error: updateError } = await supabase
+            .from('locais_favoritos')
+            .update({ endereco: enderecoLimpo, atualizado_em: new Date().toISOString() })
+            .eq('id', existing.id);
+          
+          if (updateError) {
+            console.error('Erro ao atualizar local:', updateError);
+            respostaFinal = '❌ Erro ao atualizar local.';
+          } else {
+            console.log(`✅ Local atualizado: ${apelidoNormalizado}`);
+            respostaFinal = `✅ *${maluResponse.apelido}* atualizado!\n📍 ${enderecoLimpo}`;
+          }
+        } else {
+          // Criar novo
+          const { error: insertError } = await supabase
+            .from('locais_favoritos')
+            .insert([{ usuario_id: userId, apelido: apelidoNormalizado, endereco: enderecoLimpo }]);
+          
+          if (insertError) {
+            console.error('Erro ao salvar local:', insertError);
+            respostaFinal = '❌ Erro ao salvar local.';
+          } else {
+            console.log(`✅ Local salvo: ${apelidoNormalizado}`);
+            respostaFinal = `✅ *${maluResponse.apelido}* salvo!\n📍 ${enderecoLimpo}\n\n💡 Use: "evento na ${maluResponse.apelido}"`;
+          }
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: LISTAR LOCAIS FAVORITOS
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'listar_locais') {
+      console.log('📍 Listando locais favoritos');
+      
+      const { data: locais } = await supabase
+        .from('locais_favoritos')
+        .select('apelido, endereco')
+        .eq('usuario_id', userId)
+        .order('apelido', { ascending: true });
+      
+      if (!locais || locais.length === 0) {
+        respostaFinal = '📍 Nenhum local salvo.\n\n💡 Salve: "salva [nome] como [endereço]"';
+      } else {
+        respostaFinal = `📍 *SEUS LOCAIS* (${locais.length})\n\n`;
+        
+        locais.forEach((local: any, idx: number) => {
+          respostaFinal += `${idx + 1}. *${local.apelido}*\n   📍 ${local.endereco}\n\n`;
+        });
+        
+        respostaFinal += `💡 Use: "evento na [nome]"`;
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: REMOVER LOCAL FAVORITO
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'remover_local') {
+      console.log('📍 Removendo local:', maluResponse.apelido);
+      
+      if (!maluResponse.apelido) {
+        respostaFinal = '❌ Qual local remover?\nEx: "remove local Clínica"';
+      } else {
+        const apelidoNormalizado = maluResponse.apelido.toLowerCase().trim();
+        
+        // Buscar local com ILIKE (busca parcial)
+        const { data: localEncontrado } = await supabase
+          .from('locais_favoritos')
+          .select('id, apelido, endereco')
+          .eq('usuario_id', userId)
+          .ilike('apelido', `%${apelidoNormalizado}%`)
+          .maybeSingle();
+        
+        if (!localEncontrado) {
+          respostaFinal = `❌ Local "${maluResponse.apelido}" não encontrado.\n\n💡 Veja: "meus locais"`;
+        } else {
+          // Remover
+          const { error: deleteError } = await supabase
+            .from('locais_favoritos')
+            .delete()
+            .eq('id', localEncontrado.id);
+          
+          if (deleteError) {
+            console.error('Erro ao remover local:', deleteError);
+            respostaFinal = '❌ Erro ao remover local.';
+          } else {
+            console.log(`✅ Local removido: ${localEncontrado.apelido}`);
+            respostaFinal = `✅ *${localEncontrado.apelido}* removido!`;
+          }
         }
       }
     }
