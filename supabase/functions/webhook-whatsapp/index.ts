@@ -471,9 +471,9 @@ serve(async (req) => {
         checklist: maluResponse.checklist || []
       };
 
-      // Se tem hora, adicionar ao timestamp
+      // Se tem hora, adicionar ao timestamp com timezone de Brasília (-03:00)
       if (maluResponse.hora && maluResponse.data) {
-        eventoData.data = `${maluResponse.data}T${maluResponse.hora}:00`;
+        eventoData.data = `${maluResponse.data}T${maluResponse.hora}:00-03:00`;
       }
 
       const { data: evento, error: eventoError } = await supabase
@@ -727,63 +727,17 @@ serve(async (req) => {
       }
     }
     // ═══════════════════════════════════════════════════════════
-    // HANDLER: EDITAR EVENTO (com busca flexível)
+    // HANDLER: EDITAR EVENTO (usando buscarEventos helper)
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'editar_evento') {
       console.log('✏️ Buscando para editar:', maluResponse.busca);
       
-      const dataLimite = new Date();
-      dataLimite.setDate(dataLimite.getDate() + 30);
+      // Usar função helper que busca desde meia-noite
+      const { eventos: eventosEncontrados, foiBuscaFlexivel } = await buscarEventos(
+        supabase, userId, maluResponse.busca, 30
+      );
       
-      // 1️⃣ BUSCA EXATA primeiro
-      const { data: buscaExata } = await supabase
-        .from('eventos')
-        .select('*')
-        .eq('usuario_id', userId)
-        .or('status.is.null,status.eq.pendente')
-        .gte('data', new Date().toISOString())
-        .lte('data', dataLimite.toISOString())
-        .ilike('titulo', `%${maluResponse.busca}%`)
-        .order('data', { ascending: true })
-        .limit(5);
-      
-      let eventosEncontrados = buscaExata || [];
-      let foiBuscaFlexivel = false;
-      
-      // 2️⃣ Se não encontrou, BUSCA FLEXÍVEL por palavras
-      if (eventosEncontrados.length === 0) {
-        console.log('🔍 Busca exata falhou, tentando busca flexível...');
-        
-        const palavras = (maluResponse.busca || '')
-          .toLowerCase()
-          .split(' ')
-          .filter((p: string) => p.length > 2); // Ignorar palavras curtas
-        
-        if (palavras.length > 0) {
-          // Buscar todos eventos e filtrar no código
-          const { data: todosEventos } = await supabase
-            .from('eventos')
-            .select('*')
-            .eq('usuario_id', userId)
-            .or('status.is.null,status.eq.pendente')
-            .gte('data', new Date().toISOString())
-            .lte('data', dataLimite.toISOString())
-            .order('data', { ascending: true });
-          
-          // Filtrar eventos que contêm TODAS as palavras
-          eventosEncontrados = (todosEventos || []).filter((evento: any) => {
-            const tituloLower = evento.titulo.toLowerCase();
-            return palavras.every((palavra: string) => tituloLower.includes(palavra));
-          });
-          
-          if (eventosEncontrados.length > 0) {
-            foiBuscaFlexivel = true;
-            console.log('✅ Busca flexível encontrou:', eventosEncontrados.length, 'eventos');
-          }
-        }
-      }
-      
-      // 3️⃣ Processar resultados
+      // Processar resultados
       if (eventosEncontrados.length === 0) {
         respostaFinal = `❌ Não encontrei "${maluResponse.busca}" nos próximos 30 dias.`;
         
@@ -905,61 +859,17 @@ serve(async (req) => {
       }
     }
     // ═══════════════════════════════════════════════════════════
-    // HANDLER: CANCELAR EVENTO (com busca flexível)
+    // HANDLER: CANCELAR EVENTO (usando buscarEventos helper)
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'cancelar_evento') {
       console.log('❌ Buscando para cancelar:', maluResponse.busca);
       
-      const dataLimite = new Date();
-      dataLimite.setDate(dataLimite.getDate() + 30);
+      // Usar função helper que busca desde meia-noite
+      const { eventos: eventosEncontrados, foiBuscaFlexivel } = await buscarEventos(
+        supabase, userId, maluResponse.busca, 30
+      );
       
-      // 1️⃣ BUSCA EXATA primeiro
-      const { data: buscaExata } = await supabase
-        .from('eventos')
-        .select('*')
-        .eq('usuario_id', userId)
-        .or('status.is.null,status.eq.pendente')
-        .gte('data', new Date().toISOString())
-        .lte('data', dataLimite.toISOString())
-        .ilike('titulo', `%${maluResponse.busca}%`)
-        .order('data', { ascending: true })
-        .limit(5);
-      
-      let eventosEncontrados = buscaExata || [];
-      let foiBuscaFlexivel = false;
-      
-      // 2️⃣ Se não encontrou, BUSCA FLEXÍVEL por palavras
-      if (eventosEncontrados.length === 0) {
-        console.log('🔍 Busca exata falhou, tentando busca flexível...');
-        
-        const palavras = (maluResponse.busca || '')
-          .toLowerCase()
-          .split(' ')
-          .filter((p: string) => p.length > 2);
-        
-        if (palavras.length > 0) {
-          const { data: todosEventos } = await supabase
-            .from('eventos')
-            .select('*')
-            .eq('usuario_id', userId)
-            .or('status.is.null,status.eq.pendente')
-            .gte('data', new Date().toISOString())
-            .lte('data', dataLimite.toISOString())
-            .order('data', { ascending: true });
-          
-          eventosEncontrados = (todosEventos || []).filter((evento: any) => {
-            const tituloLower = evento.titulo.toLowerCase();
-            return palavras.every((palavra: string) => tituloLower.includes(palavra));
-          });
-          
-          if (eventosEncontrados.length > 0) {
-            foiBuscaFlexivel = true;
-            console.log('✅ Busca flexível encontrou:', eventosEncontrados.length, 'eventos');
-          }
-        }
-      }
-      
-      // 3️⃣ Processar resultados
+      // Processar resultados
       if (eventosEncontrados.length === 0) {
         respostaFinal = `❌ Não encontrei "${maluResponse.busca}" para cancelar.`;
         
