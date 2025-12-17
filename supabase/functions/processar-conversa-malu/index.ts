@@ -10,7 +10,8 @@ interface MaluResponse {
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
         'buscar_evento' | 'snooze_lembrete' | 'marcar_status' |
         'salvar_local' | 'listar_locais' | 'remover_local' |
-        'criar_recorrente' | 'confirmar_recorrente' |  // ✅ NOVO: eventos recorrentes
+        'criar_recorrente' | 'confirmar_recorrente' |
+        'criar_lembrete' | 'responder_lembrete' |  // ✅ NOVO: lembretes persistentes
         'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
@@ -28,14 +29,17 @@ interface MaluResponse {
   novo_status?: 'pendente' | 'concluido';  // Para marcar_status
   filtro_status?: 'pendente' | 'concluido';  // Para filtrar agenda
   apelido?: string;      // Para locais favoritos
-  // ✅ NOVO: Recorrência
+  // Recorrência
   recorrencia?: {
     frequencia: 'diario' | 'semanal' | 'mensal';
-    intervalo?: number;       // A cada X (padrão 1)
-    dias_semana?: number[];   // [0-6] para semanal
-    dia_mes?: number;         // 1-31 para mensal
-    duracao?: string;         // "3 meses", "10 vezes", "fim do ano"
+    intervalo?: number;
+    dias_semana?: number[];
+    dia_mes?: number;
+    duracao?: string;
   };
+  // ✅ NOVO: Lembretes persistentes
+  eh_lembrete?: boolean;
+  resposta_lembrete?: 'sim' | 'nao' | 'indefinido';
 }
 
 serve(async (req) => {
@@ -488,6 +492,58 @@ IMPORTANTE RECORRÊNCIA:
 - Horário obrigatório para eventos recorrentes
 - Emoji 🔁 para indicar evento recorrente
 
+=== LEMBRETES PERSISTENTES ===
+
+DIFERENÇA ENTRE TIPOS:
+
+COMPROMISSO (hora específica):
+- Uso: eventos com horário fixo
+- Exemplos: 'dentista terça 14h', 'reunião segunda 10h'
+- Lembrete: antes do horário
+- Follow-up: não (acabou o evento, acabou)
+
+LEMBRETE PERSISTENTE (sem hora específica):
+- Uso: tarefas flexíveis, sem horário fixo
+- Exemplos: 'lembra de comprar leite', 'ligar pro dentista', 'pagar conta'
+- Follow-up: sim! Sistema pergunta várias vezes até fazer
+- Duração: até 7 dias ou marcar concluído
+
+CRIAR LEMBRETE:
+Comandos: 'lembra de [tarefa]', 'me avisa [tarefa]', 'não esquecer [tarefa]', 'não deixa esquecer'
+
+Formato:
+{
+  "acao": "criar_lembrete",
+  "titulo": "descrição da tarefa",
+  "tipo": "lembrete",
+  "resposta": "✅ Lembrete criado! Vou perguntar em 3h se você fez."
+}
+
+Exemplos:
+- 'lembra de comprar leite' → {"acao": "criar_lembrete", "titulo": "comprar leite", "tipo": "lembrete"}
+- 'me avisa de ligar pro dentista' → {"acao": "criar_lembrete", "titulo": "ligar pro dentista", "tipo": "lembrete"}
+- 'não esquecer de pagar conta' → {"acao": "criar_lembrete", "titulo": "pagar conta", "tipo": "lembrete"}
+
+RESPONDER A LEMBRETE:
+Quando Malu pergunta 'Já fez X?' ou 'E aí?', detectar resposta:
+
+SIM/FEITO:
+- 'sim', 'fiz', 'feito', 'já fiz', 'pronto', 'ok', 'comprei', 'liguei', 'paguei'
+→ {"acao": "responder_lembrete", "resposta_lembrete": "sim"}
+
+NÃO/AINDA NÃO:
+- 'não', 'nao', 'ainda não', 'esqueci', 'não deu', 'não consegui'
+→ {"acao": "responder_lembrete", "resposta_lembrete": "nao"}
+
+CONTEXTO IMPORTANTE:
+- Se última mensagem da Malu foi pergunta de follow-up (contém '👋' ou 'Já fez'), resposta se refere a isso
+- Detectar pronomes: 'sim' sozinho = resposta ao lembrete
+
+QUANDO NÃO É LEMBRETE:
+- Se tem horário específico → compromisso normal
+- 'dentista terça 14h' → compromisso, NÃO lembrete
+- 'lembra de ir ao dentista terça 14h' → compromisso com lembrete antes
+
 DATAS:
 - HOJE: ${dataHoje}
 - "amanhã" = dia seguinte
@@ -512,6 +568,10 @@ User: "sim"
 Aniversário:
 User: "Aniversário da Maria dia 25/01"
 → {"acao": "confirmar_evento", "tipo": "aniversario", "titulo": "Aniversário da Maria", "data": "2026-01-25", "pessoa": "Maria", "checklist": ["Presente comprado?", "Cartão/mensagem"], "resposta": "📋 Entendi:\\n• Aniversário da Maria\\n• 25/01\\n\\n📋 Lembrete:\\n□ Presente?\\n□ Cartão?\\n\\nConfirma?"}
+
+Lembrete persistente:
+User: "Lembra de comprar leite"
+→ {"acao": "criar_lembrete", "titulo": "comprar leite", "tipo": "lembrete", "resposta": "✅ Lembrete criado! Vou perguntar em 3h se você fez."}
 
 LIMITE: Resposta máximo 200 caracteres.
 

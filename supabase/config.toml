@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.calcular-tempo-viagem]
 verify_jwt = false
+
+[functions.processar-lembretes-followup]
+verify_jwt = false
