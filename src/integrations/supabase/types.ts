@@ -482,6 +482,36 @@ export type Database = {
           },
         ]
       }
+      usuario_stats: {
+        Row: {
+          atualizado_em: string | null
+          criado_em: string | null
+          dias_seguidos: number | null
+          melhor_sequencia: number | null
+          total_concluidos: number | null
+          ultima_atividade: string | null
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string | null
+          criado_em?: string | null
+          dias_seguidos?: number | null
+          melhor_sequencia?: number | null
+          total_concluidos?: number | null
+          ultima_atividade?: string | null
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string | null
+          criado_em?: string | null
+          dias_seguidos?: number | null
+          melhor_sequencia?: number | null
+          total_concluidos?: number | null
+          ultima_atividade?: string | null
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_usuarios: {
         Row: {
           ativo: boolean | null

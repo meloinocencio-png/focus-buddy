@@ -75,7 +75,8 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
       let query = supabase
         .from("eventos")
         .select("*")
-        .order("data", { ascending: true });
+        .order("data", { ascending: true })
+        .limit(100); // Limitar para performance
 
       // Aplicar filtro de cancelados
       if (!showCanceled) {
@@ -336,6 +337,7 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
                   tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
+                  onStatusChange={fetchEventos}
                 />
               ))
             )}
@@ -362,6 +364,7 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
                   tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
+                  onStatusChange={fetchEventos}
                 />
               ))
             )}
@@ -388,6 +391,7 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
                   tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
+                  onStatusChange={fetchEventos}
                 />
               ))
             )}
