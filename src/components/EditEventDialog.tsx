@@ -25,11 +25,15 @@ import { parseUTCDate } from "@/utils/dateUtils";
 
 interface Evento {
   id: string;
-  tipo: "aniversario" | "compromisso" | "tarefa" | "saude";
+  tipo: "aniversario" | "compromisso" | "tarefa" | "saude" | "lembrete";
   titulo: string;
   descricao: string | null;
   data: string;
   pessoa: string | null;
+  status?: "pendente" | "concluido" | "cancelado" | null;
+  eh_recorrente?: boolean | null;
+  tempo_viagem_minutos?: number | null;
+  endereco?: string | null;
 }
 
 interface EditEventDialogProps {
@@ -138,6 +142,7 @@ export const EditEventDialog = ({
                 <SelectItem value="compromisso">📅 Compromisso</SelectItem>
                 <SelectItem value="tarefa">🛒 Tarefa</SelectItem>
                 <SelectItem value="saude">💊 Saúde</SelectItem>
+                <SelectItem value="lembrete">🔔 Lembrete</SelectItem>
               </SelectContent>
             </Select>
           </div>

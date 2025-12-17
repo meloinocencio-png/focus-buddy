@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { EventCard } from "./EventCard";
 import { EditEventDialog } from "./EditEventDialog";
@@ -21,29 +21,33 @@ import { toast } from "sonner";
 
 interface Evento {
   id: string;
-  tipo: "aniversario" | "compromisso" | "tarefa" | "saude";
+  tipo: "aniversario" | "compromisso" | "tarefa" | "saude" | "lembrete";
   titulo: string;
   descricao: string | null;
   data: string;
   pessoa: string | null;
   endereco: string | null;
+  status: "pendente" | "concluido" | "cancelado" | null;
+  eh_recorrente: boolean | null;
+  tempo_viagem_minutos: number | null;
 }
 
-export const Dashboard = () => {
+export interface DashboardRef {
+  refresh: () => void;
+}
+
+export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchEventos();
-  }, []);
-
-  const fetchEventos = async () => {
+  const fetchEventos = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("eventos")
         .select("*")
+        .neq("status", "cancelado") // Filtrar eventos cancelados
         .order("data", { ascending: true });
 
       if (error) throw error;
@@ -53,7 +57,16 @@ export const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchEventos();
+  }, [fetchEventos]);
+
+  // Expor método refresh para o componente pai
+  useImperativeHandle(ref, () => ({
+    refresh: fetchEventos
+  }), [fetchEventos]);
 
   const handleEdit = (id: string) => {
     const evento = eventos.find((e) => e.id === id);
@@ -149,6 +162,9 @@ export const Dashboard = () => {
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   endereco={evento.endereco || undefined}
+                  status={evento.status || "pendente"}
+                  eh_recorrente={evento.eh_recorrente || false}
+                  tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />
@@ -172,6 +188,9 @@ export const Dashboard = () => {
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   endereco={evento.endereco || undefined}
+                  status={evento.status || "pendente"}
+                  eh_recorrente={evento.eh_recorrente || false}
+                  tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />
@@ -195,6 +214,9 @@ export const Dashboard = () => {
                   data={parseUTCDate(evento.data)}
                   pessoa={evento.pessoa || undefined}
                   endereco={evento.endereco || undefined}
+                  status={evento.status || "pendente"}
+                  eh_recorrente={evento.eh_recorrente || false}
+                  tempo_viagem_minutos={evento.tempo_viagem_minutos || undefined}
                   onEdit={handleEdit}
                   onDelete={setDeletingId}
                 />
@@ -234,4 +256,6 @@ export const Dashboard = () => {
       </AlertDialog>
     </>
   );
-};
+});
+
+Dashboard.displayName = "Dashboard";
