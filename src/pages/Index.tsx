@@ -6,6 +6,7 @@ import { Dashboard, DashboardRef } from "@/components/Dashboard";
 import { DayProgressWidget } from "@/components/DayProgressWidget";
 import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
 import { CentroNotificacoes } from "@/components/CentroNotificacoes";
+import { StreakBadge } from "@/components/StreakBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Moon, Sun, Bell, Settings } from "lucide-react";
@@ -129,8 +130,15 @@ const Index = () => {
         {/* Notificações em destaque */}
         <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} />
 
-        {/* Widget de progresso do dia */}
-        <DayProgressWidget />
+        {/* Widget de progresso + Streak Badge */}
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch">
+          <div className="flex-1">
+            <DayProgressWidget />
+          </div>
+          <div className="sm:w-auto">
+            <StreakBadge />
+          </div>
+        </div>
 
         <section className="text-center space-y-6">
           <div>

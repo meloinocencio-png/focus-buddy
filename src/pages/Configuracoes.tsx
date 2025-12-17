@@ -7,7 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { ArrowLeft, Moon, Sun } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Moon, Sun, Phone, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const Configuracoes = () => {
@@ -16,20 +17,28 @@ const Configuracoes = () => {
   const [saving, setSaving] = useState(false);
   const [isDark, setIsDark] = useState(false);
   
+  // Configurações de lembretes
   const [config, setConfig] = useState({
     notificacoes_ativas: true,
     hora_lembrete_diario: "07:00:00",
-    whatsapp: "",
   });
 
+  // WhatsApp separado (usa tabela whatsapp_usuarios)
+  const [whatsappData, setWhatsappData] = useState<{
+    whatsapp: string;
+    nome: string | null;
+  } | null>(null);
+  const [novoWhatsapp, setNovoWhatsapp] = useState("");
+  const [vinculandoWhatsapp, setVinculandoWhatsapp] = useState(false);
+
   useEffect(() => {
-    // Verificar tema
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark") {
       setIsDark(true);
     }
 
     fetchConfig();
+    fetchWhatsapp();
   }, []);
 
   const fetchConfig = async () => {
@@ -49,7 +58,6 @@ const Configuracoes = () => {
         setConfig({
           notificacoes_ativas: data.notificacoes_ativas,
           hora_lembrete_diario: data.hora_lembrete_diario,
-          whatsapp: data.whatsapp || "",
         });
       }
     } catch (error) {
@@ -57,6 +65,25 @@ const Configuracoes = () => {
       toast.error("Erro ao carregar configurações");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchWhatsapp = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("whatsapp_usuarios")
+        .select("whatsapp, nome")
+        .eq("usuario_id", user.id)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      
+      setWhatsappData(data);
+    } catch (error) {
+      console.error("Erro ao buscar WhatsApp:", error);
     }
   };
 
@@ -72,7 +99,6 @@ const Configuracoes = () => {
           usuario_id: user.id,
           notificacoes_ativas: config.notificacoes_ativas,
           hora_lembrete_diario: config.hora_lembrete_diario,
-          whatsapp: config.whatsapp || null,
         });
 
       if (error) throw error;
@@ -83,6 +109,74 @@ const Configuracoes = () => {
       toast.error("Erro ao salvar configurações");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const vincularWhatsapp = async () => {
+    if (!novoWhatsapp.trim()) {
+      toast.error("Digite um número de WhatsApp");
+      return;
+    }
+
+    try {
+      setVinculandoWhatsapp(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Usuário não autenticado");
+        return;
+      }
+
+      // Limpar número (só dígitos)
+      const whatsappLimpo = novoWhatsapp.replace(/\D/g, "");
+      
+      if (whatsappLimpo.length < 10) {
+        toast.error("Número inválido. Use formato: 5511999999999");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("whatsapp_usuarios")
+        .upsert({
+          usuario_id: user.id,
+          whatsapp: whatsappLimpo,
+          nome: user.email?.split("@")[0] || "Usuário",
+          ativo: true,
+        });
+
+      if (error) throw error;
+
+      toast.success("WhatsApp vinculado! Envie 'oi' para o número da Malu para ativar.");
+      setWhatsappData({ whatsapp: whatsappLimpo, nome: user.email?.split("@")[0] || null });
+      setNovoWhatsapp("");
+    } catch (error) {
+      console.error("Erro ao vincular WhatsApp:", error);
+      toast.error("Erro ao vincular WhatsApp");
+    } finally {
+      setVinculandoWhatsapp(false);
+    }
+  };
+
+  const desvincularWhatsapp = async () => {
+    if (!confirm("Tem certeza que deseja desvincular o WhatsApp? Você não receberá mais lembretes via mensagem.")) {
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("whatsapp_usuarios")
+        .delete()
+        .eq("usuario_id", user.id);
+
+      if (error) throw error;
+
+      toast.success("WhatsApp desvinculado");
+      setWhatsappData(null);
+    } catch (error) {
+      console.error("Erro ao desvincular WhatsApp:", error);
+      toast.error("Erro ao desvincular WhatsApp");
     }
   };
 
@@ -114,12 +208,20 @@ const Configuracoes = () => {
     }
   };
 
+  const formatarWhatsapp = (numero: string) => {
+    // Formata 5511999999999 para +55 11 99999-9999
+    if (numero.length === 13) {
+      return `+${numero.slice(0, 2)} ${numero.slice(2, 4)} ${numero.slice(4, 9)}-${numero.slice(9)}`;
+    }
+    return numero;
+  };
+
   const horaEmHoras = parseInt(config.hora_lembrete_diario.split(":")[0]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-success-soft to-info-soft flex items-center justify-center">
-        <p className="text-muted-foreground">Carregando...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -155,6 +257,76 @@ const Configuracoes = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="space-y-6">
+          {/* WhatsApp */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              WhatsApp
+            </h2>
+            
+            {whatsappData ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-success/10 rounded-lg border border-success/30">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-success/20 flex items-center justify-center">
+                      <Check className="h-5 w-5 text-success" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {formatarWhatsapp(whatsappData.whatsapp)}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-xs">
+                          Conectado
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={desvincularWhatsapp}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Desvincular
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  📱 Você receberá lembretes e poderá conversar com a Malu neste número.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    type="tel"
+                    placeholder="5511999999999"
+                    value={novoWhatsapp}
+                    onChange={(e) => setNovoWhatsapp(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button 
+                    onClick={vincularWhatsapp}
+                    disabled={vinculandoWhatsapp}
+                  >
+                    {vinculandoWhatsapp ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Vincular"
+                    )}
+                  </Button>
+                </div>
+                <div className="p-3 bg-info-soft rounded-lg border border-border">
+                  <p className="text-sm text-muted-foreground">
+                    💡 <strong>Como ativar:</strong> Após vincular, envie "oi" para o número da Malu para começar a receber lembretes via WhatsApp.
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Notificações */}
           <Card className="p-6">
             <h2 className="text-xl font-semibold mb-4">🔔 Notificações</h2>
             
@@ -196,23 +368,6 @@ const Configuracoes = () => {
                   disabled={!config.notificacoes_ativas}
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp" className="text-base">
-                  WhatsApp (em breve)
-                </Label>
-                <Input
-                  id="whatsapp"
-                  type="tel"
-                  placeholder="+55 11 99999-9999"
-                  value={config.whatsapp}
-                  onChange={(e) => setConfig({ ...config, whatsapp: e.target.value })}
-                  disabled
-                />
-                <p className="text-xs text-muted-foreground">
-                  🚧 Integração com WhatsApp chegando em breve!
-                </p>
-              </div>
             </div>
           </Card>
 
@@ -222,7 +377,14 @@ const Configuracoes = () => {
               disabled={saving}
               className="flex-1"
             >
-              {saving ? "Salvando..." : "Salvar Configurações"}
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar Configurações"
+              )}
             </Button>
             
             <Button
