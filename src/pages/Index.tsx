@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Dashboard, DashboardRef } from "@/components/Dashboard";
+import { DayProgressWidget } from "@/components/DayProgressWidget";
 import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
 import { CentroNotificacoes } from "@/components/CentroNotificacoes";
 import { Button } from "@/components/ui/button";
@@ -124,9 +125,12 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 space-y-12">
+      <main className="container mx-auto px-4 py-8 space-y-8">
         {/* Notificações em destaque */}
         <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} />
+
+        {/* Widget de progresso do dia */}
+        <DayProgressWidget />
 
         <section className="text-center space-y-6">
           <div>

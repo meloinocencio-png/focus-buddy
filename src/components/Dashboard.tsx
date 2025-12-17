@@ -7,6 +7,9 @@ import { ptBR } from "date-fns/locale";
 import { parseUTCDate } from "@/utils/dateUtils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Skeleton } from "./ui/skeleton";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { Filter, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +20,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { toast } from "sonner";
 
 interface Evento {
@@ -36,19 +47,42 @@ export interface DashboardRef {
   refresh: () => void;
 }
 
+type StatusFilter = "todos" | "pendente" | "concluido";
+type TipoFilter = "todos" | "aniversario" | "compromisso" | "tarefa" | "saude" | "lembrete";
+
+const tipoLabels: Record<TipoFilter, { label: string; emoji: string }> = {
+  todos: { label: "Todos", emoji: "📋" },
+  aniversario: { label: "Aniversários", emoji: "🎂" },
+  compromisso: { label: "Compromissos", emoji: "📅" },
+  tarefa: { label: "Tarefas", emoji: "🛒" },
+  saude: { label: "Saúde", emoji: "💊" },
+  lembrete: { label: "Lembretes", emoji: "🔔" },
+};
+
 export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  // Filtros
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("pendente");
+  const [tipoFilter, setTipoFilter] = useState<TipoFilter>("todos");
+  const [showCanceled, setShowCanceled] = useState(false);
 
   const fetchEventos = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("eventos")
         .select("*")
-        .neq("status", "cancelado") // Filtrar eventos cancelados
         .order("data", { ascending: true });
+
+      // Aplicar filtro de cancelados
+      if (!showCanceled) {
+        query = query.neq("status", "cancelado");
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setEventos((data as Evento[]) || []);
@@ -57,7 +91,7 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showCanceled]);
 
   useEffect(() => {
     fetchEventos();
@@ -101,23 +135,55 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
     setEditingEvento(null);
   };
 
-  const eventosHoje = eventos.filter((e) => isToday(parseUTCDate(e.data)));
-  
-  const eventosProximos = eventos.filter((e) => {
-    const dataEvento = parseUTCDate(e.data);
-    return !isToday(dataEvento) && isWithinInterval(dataEvento, {
-      start: addDays(startOfDay(new Date()), 1),
-      end: addDays(startOfDay(new Date()), 7),
+  // Aplicar filtros
+  const filtrarEventos = (eventosList: Evento[]) => {
+    return eventosList.filter((e) => {
+      // Filtro de status
+      if (statusFilter !== "todos") {
+        const eventoStatus = e.status || "pendente";
+        if (eventoStatus !== statusFilter) return false;
+      }
+      
+      // Filtro de tipo
+      if (tipoFilter !== "todos" && e.tipo !== tipoFilter) {
+        return false;
+      }
+      
+      return true;
     });
-  });
+  };
 
-  const eventosProximos30 = eventos.filter((e) => {
-    const dataEvento = parseUTCDate(e.data);
-    return isWithinInterval(dataEvento, {
-      start: addDays(startOfDay(new Date()), 8),
-      end: addDays(startOfDay(new Date()), 30),
-    });
-  });
+  const eventosHoje = filtrarEventos(
+    eventos.filter((e) => isToday(parseUTCDate(e.data)))
+  );
+  
+  const eventosProximos = filtrarEventos(
+    eventos.filter((e) => {
+      const dataEvento = parseUTCDate(e.data);
+      return !isToday(dataEvento) && isWithinInterval(dataEvento, {
+        start: addDays(startOfDay(new Date()), 1),
+        end: addDays(startOfDay(new Date()), 7),
+      });
+    })
+  );
+
+  const eventosProximos30 = filtrarEventos(
+    eventos.filter((e) => {
+      const dataEvento = parseUTCDate(e.data);
+      return isWithinInterval(dataEvento, {
+        start: addDays(startOfDay(new Date()), 8),
+        end: addDays(startOfDay(new Date()), 30),
+      });
+    })
+  );
+
+  const hasActiveFilters = statusFilter !== "pendente" || tipoFilter !== "todos" || showCanceled;
+
+  const clearFilters = () => {
+    setStatusFilter("pendente");
+    setTipoFilter("todos");
+    setShowCanceled(false);
+  };
 
   if (loading) {
     return (
@@ -132,6 +198,99 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
   return (
     <>
       <div className="w-full max-w-4xl mx-auto">
+        {/* Barra de filtros */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filtros
+                {hasActiveFilters && (
+                  <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                    !
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Status</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={statusFilter === "todos"}
+                onCheckedChange={() => setStatusFilter("todos")}
+              >
+                📋 Todos
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={statusFilter === "pendente"}
+                onCheckedChange={() => setStatusFilter("pendente")}
+              >
+                ⏳ Pendentes
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={statusFilter === "concluido"}
+                onCheckedChange={() => setStatusFilter("concluido")}
+              >
+                ✅ Concluídos
+              </DropdownMenuCheckboxItem>
+              
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Tipo</DropdownMenuLabel>
+              {Object.entries(tipoLabels).map(([key, { label, emoji }]) => (
+                <DropdownMenuCheckboxItem
+                  key={key}
+                  checked={tipoFilter === key}
+                  onCheckedChange={() => setTipoFilter(key as TipoFilter)}
+                >
+                  {emoji} {label}
+                </DropdownMenuCheckboxItem>
+              ))}
+              
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={showCanceled}
+                onCheckedChange={setShowCanceled}
+              >
+                ❌ Mostrar cancelados
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Badges dos filtros ativos */}
+          {statusFilter !== "pendente" && (
+            <Badge variant="secondary" className="gap-1">
+              {statusFilter === "todos" ? "Todos status" : statusFilter === "concluido" ? "✅ Concluídos" : "⏳ Pendentes"}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => setStatusFilter("pendente")}
+              />
+            </Badge>
+          )}
+          {tipoFilter !== "todos" && (
+            <Badge variant="secondary" className="gap-1">
+              {tipoLabels[tipoFilter].emoji} {tipoLabels[tipoFilter].label}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => setTipoFilter("todos")}
+              />
+            </Badge>
+          )}
+          {showCanceled && (
+            <Badge variant="secondary" className="gap-1">
+              Incluindo cancelados
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => setShowCanceled(false)}
+              />
+            </Badge>
+          )}
+          
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
+              Limpar filtros
+            </Button>
+          )}
+        </div>
+
         <Tabs defaultValue="hoje" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="hoje" className="text-base">
@@ -148,8 +307,18 @@ export const Dashboard = forwardRef<DashboardRef>((_, ref) => {
           <TabsContent value="hoje" className="space-y-4 mt-0">
             {eventosHoje.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                <p className="text-lg">Nenhum compromisso para hoje! 🎉</p>
-                <p className="text-sm mt-2">Use o botão de voz para adicionar um novo evento</p>
+                <p className="text-lg">
+                  {statusFilter === "concluido" 
+                    ? "Nenhum evento concluído hoje" 
+                    : "Nenhum compromisso para hoje! 🎉"
+                  }
+                </p>
+                <p className="text-sm mt-2">
+                  {statusFilter === "concluido"
+                    ? "Complete suas tarefas para vê-las aqui"
+                    : "Use o botão de voz para adicionar um novo evento"
+                  }
+                </p>
               </div>
             ) : (
               eventosHoje.map((evento) => (
