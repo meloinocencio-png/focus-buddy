@@ -199,13 +199,13 @@ serve(async (req) => {
     console.log('🔒 Lock criado:', conversaId);
     console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}${imageUrl ? ' [+imagem]' : ''}`);
 
-    // 1. Buscar contexto das últimas 5 conversas
+    // 1. Buscar contexto das últimas 10 conversas (aumentado para melhor interpretação)
     const { data: ultimasConversas } = await supabase
       .from('conversas')
       .select('mensagem_usuario, mensagem_malu')
       .eq('whatsapp_de', phone)
       .order('criada_em', { ascending: false })
-      .limit(5);
+      .limit(10);
 
     const contexto: any[] = ultimasConversas?.reverse().map(c => ({
       usuario: c.mensagem_usuario,
@@ -213,6 +213,35 @@ serve(async (req) => {
     })) || [];
 
     console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
+
+    // ═══════════════════════════════════════════════════════════
+    // DETECTAR SE ÚLTIMA MENSAGEM DA MALU FOI PERGUNTA
+    // ═══════════════════════════════════════════════════════════
+    let ultimaPerguntaMalu = false;
+    let textoUltimaPergunta = '';
+
+    if (contexto.length > 0) {
+      const ultimaMensagemMalu = contexto[contexto.length - 1]?.malu;
+      
+      if (ultimaMensagemMalu && ultimaMensagemMalu.includes('?')) {
+        ultimaPerguntaMalu = true;
+        textoUltimaPergunta = ultimaMensagemMalu;
+        console.log('📝 Última mensagem da Malu foi pergunta:', textoUltimaPergunta.substring(0, 80));
+      }
+    }
+
+    // Se resposta curta após pergunta, adicionar contexto implícito para o Claude
+    const respostaCurta = message.trim().length < 30;
+
+    if (ultimaPerguntaMalu && respostaCurta) {
+      console.log('⚡ Resposta curta detectada após pergunta! Adicionando hint para Claude.');
+      
+      // Adicionar hint como mensagem de sistema para ajudar Claude interpretar
+      contexto.push({
+        role: 'system',
+        content: `[CONTEXTO: Você acabou de perguntar: "${textoUltimaPergunta}". A resposta "${message}" é provavelmente resposta a essa pergunta. Interprete de acordo - NÃO pergunte "sim o quê?" ou "não o quê?"!]`
+      });
+    }
 
     // ═══════════════════════════════════════════════════════════
     // CARREGAR LOCAIS FAVORITOS DO USUÁRIO

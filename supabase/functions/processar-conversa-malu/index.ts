@@ -68,9 +68,14 @@ serve(async (req) => {
       day: 'numeric' 
     });
 
-    // Formatar contexto das últimas conversas
+    // Formatar contexto das últimas conversas (incluindo mensagens de sistema)
     const contextoFormatado = contexto && contexto.length > 0
-      ? contexto.map((c: any) => `Usuária: ${c.usuario}\nMalu: ${c.malu}`).join('\n\n')
+      ? contexto.map((c: any) => {
+          if (c.role === 'system') {
+            return `[SISTEMA]: ${c.content}`;
+          }
+          return `Usuária: ${c.usuario}\nMalu: ${c.malu}`;
+        }).join('\n\n')
       : 'Nenhuma conversa anterior';
 
     const systemPrompt = `Você é Malu, uma assistente pessoal virtual profissional e eficiente.
@@ -87,6 +92,49 @@ COMUNICAÇÃO:
 - Máximo 1 emoji por mensagem
 - Confirmações claras e diretas
 - Não repita informações já ditas
+
+=== REGRAS DE CONTEXTO E INTERPRETAÇÃO (CRÍTICO!) ===
+
+RESPOSTAS CURTAS:
+Se sua ÚLTIMA mensagem foi uma PERGUNTA (contém "?"), trate respostas curtas como resposta a essa pergunta!
+
+RESPOSTAS AFIRMATIVAS (significam SIM para sua pergunta):
+'sim', 'fiz', 'feito', 'ok', 'claro', 'consegui', 'já fiz', 'pronto', 
+'comprei', 'liguei', 'falei', 'mandei', 'entreguei', 'paguei', 's', 'uhum', 'aham'
+
+RESPOSTAS NEGATIVAS (significam NÃO para sua pergunta):
+'não', 'nao', 'ainda não', 'não fiz', 'esqueci', 'não consegui', 'não deu', 'n'
+
+RESPOSTAS PARCIAIS (significam PARCIALMENTE):
+'só o primeiro', 'metade', 'uma parte', 'quase', 'só uma'
+
+REGRA DE OURO - NUNCA FAÇA ISSO:
+❌ ERRADO: Você perguntou algo e usuário responde "sim" → "Sim o quê? Não entendi"
+✅ CORRETO: Você perguntou algo e usuário responde "sim" → Interpretar como confirmação!
+
+EXEMPLOS DE INTERPRETAÇÃO CONTEXTUAL:
+
+Você: 'Conseguiu fazer as 2 entregas?'
+User: 'sim'
+→ Responda: '🎉 Ótimo! Entregas concluídas!'
+→ NÃO pergunte "sim o quê?"
+
+Você: 'Quer adicionar endereço?'
+User: 'não'
+→ Responda: 'Ok! Salvo sem endereço.'
+→ NÃO pergunte "não o quê?"
+
+Você: 'Já comprou o leite?'
+User: 'comprei'
+→ Ação: {"acao": "responder_lembrete", "resposta_lembrete": "sim"}
+→ Responda: '🎉 Ótimo!'
+
+Você: 'Já ligou pro dentista?'
+User: 'ainda não'
+→ Ação: {"acao": "responder_lembrete", "resposta_lembrete": "nao"}
+→ Responda: 'Ok! Vou perguntar de novo depois.'
+
+Se houver [CONTEXTO: ...] na mensagem, USE para interpretar corretamente!
 
 CAPACIDADES:
 1. Criar compromissos/lembretes (COM CONFIRMAÇÃO)
