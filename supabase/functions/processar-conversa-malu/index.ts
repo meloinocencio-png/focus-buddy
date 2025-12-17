@@ -8,7 +8,8 @@ const corsHeaders = {
 interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
-        'buscar_evento' | 'snooze_lembrete' | 'marcar_status' |  // ✅ NOVO: marcar_status
+        'buscar_evento' | 'snooze_lembrete' | 'marcar_status' |
+        'salvar_local' | 'listar_locais' | 'remover_local' |  // ✅ NOVO: locais favoritos
         'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
@@ -23,8 +24,9 @@ interface MaluResponse {
   nova_data?: string;    // Para editar - nova data (YYYY-MM-DD)
   nova_hora?: string;    // Para editar - nova hora (HH:MM)
   minutos?: number;      // Para snooze - minutos para adiar
-  novo_status?: 'pendente' | 'concluido';  // ✅ NOVO: para marcar_status
-  filtro_status?: 'pendente' | 'concluido';  // ✅ NOVO: para filtrar agenda
+  novo_status?: 'pendente' | 'concluido';  // Para marcar_status
+  filtro_status?: 'pendente' | 'concluido';  // Para filtrar agenda
+  apelido?: string;      // ✅ NOVO: para locais favoritos
 }
 
 serve(async (req) => {
@@ -384,6 +386,45 @@ Exemplos:
 - 'o que falta fazer?' → {"acao": "consultar_agenda", "periodo": "hoje", "filtro_status": "pendente"}
 - 'o que eu fiz hoje?' → {"acao": "consultar_agenda", "periodo": "hoje", "filtro_status": "concluido"}
 - 'mostra só pendentes' → {"acao": "consultar_agenda", "periodo": "todos", "filtro_status": "pendente"}
+
+=== LOCAIS FAVORITOS ===
+
+SALVAR LOCAL:
+Comandos: 'salva [apelido] como [endereço]', 'guardar local [apelido]', 'salvar [apelido]: [endereço]'
+
+{
+  "acao": "salvar_local",
+  "apelido": "nome curto memorável",
+  "endereco": "endereço completo",
+  "resposta": "📍 Salvando local..."
+}
+
+Exemplos:
+- 'salva Clínica como Rua XV 500' → {"acao": "salvar_local", "apelido": "clínica", "endereco": "Rua XV de Novembro, 500"}
+- 'guardar endereço trabalho Av Paulista 1000' → {"acao": "salvar_local", "apelido": "trabalho", "endereco": "Av. Paulista, 1000"}
+- 'local casa vó: Rua das Flores 123' → {"acao": "salvar_local", "apelido": "casa vó", "endereco": "Rua das Flores, 123"}
+
+LISTAR LOCAIS:
+Comandos: 'meus locais', 'lista locais', 'quais locais tenho', 'ver locais salvos'
+
+{
+  "acao": "listar_locais",
+  "resposta": "📍 Locais salvos..."
+}
+
+REMOVER LOCAL:
+Comandos: 'remove local [apelido]', 'apaga local [apelido]', 'deleta [apelido]'
+
+{
+  "acao": "remover_local",
+  "apelido": "nome do local",
+  "resposta": "📍 Removendo..."
+}
+
+IMPORTANTE LOCAIS:
+- Apelidos: lowercase, máx 50 caracteres
+- Endereço: máx 200 caracteres
+- Um apelido por usuário (substitui se já existe)
 
 DATAS:
 - HOJE: ${dataHoje}
