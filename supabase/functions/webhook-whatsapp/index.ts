@@ -813,7 +813,13 @@ serve(async (req) => {
     // HANDLER: CONFIRMAR EDIÇÃO
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'confirmar_edicao') {
-      const acaoPendente = contexto.find((c: any) => c.acao_pendente === 'editar');
+      // Aceitar ambos os tipos de contexto:
+      // 1. Edição direta após busca exata (acao_pendente: 'editar')
+      // 2. Confirmação após busca flexível (confirmar_evento_encontrado + proxima_acao: 'editar')
+      const acaoPendente = contexto.find((c: any) => 
+        c.acao_pendente === 'editar' || 
+        (c.acao_pendente === 'confirmar_evento_encontrado' && c.proxima_acao === 'editar')
+      );
       
       if (!acaoPendente) {
         respostaFinal = '❌ Não há edição pendente.';
@@ -976,7 +982,13 @@ serve(async (req) => {
     // HANDLER: CONFIRMAR CANCELAMENTO
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'confirmar_cancelamento') {
-      const acaoPendente = contexto.find((c: any) => c.acao_pendente === 'cancelar');
+      // Aceitar ambos os tipos de contexto:
+      // 1. Cancelamento direto após busca exata (acao_pendente: 'cancelar')
+      // 2. Confirmação após busca flexível (confirmar_evento_encontrado + proxima_acao: 'cancelar')
+      const acaoPendente = contexto.find((c: any) => 
+        c.acao_pendente === 'cancelar' || 
+        (c.acao_pendente === 'confirmar_evento_encontrado' && c.proxima_acao === 'cancelar')
+      );
       
       if (!acaoPendente) {
         respostaFinal = '❌ Não há cancelamento pendente.';
