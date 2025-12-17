@@ -9,7 +9,8 @@ interface MaluResponse {
   acao: 'criar_evento' | 'confirmar_evento' | 'editar_evento' | 'cancelar_evento' | 
         'confirmar_edicao' | 'confirmar_cancelamento' | 'confirmar_sugestao' |
         'buscar_evento' | 'snooze_lembrete' | 'marcar_status' |
-        'salvar_local' | 'listar_locais' | 'remover_local' |  // ✅ NOVO: locais favoritos
+        'salvar_local' | 'listar_locais' | 'remover_local' |
+        'criar_recorrente' | 'confirmar_recorrente' |  // ✅ NOVO: eventos recorrentes
         'consultar_agenda' | 'conversar' | 'atualizar_endereco';
   resposta?: string;
   tipo?: string;
@@ -26,7 +27,15 @@ interface MaluResponse {
   minutos?: number;      // Para snooze - minutos para adiar
   novo_status?: 'pendente' | 'concluido';  // Para marcar_status
   filtro_status?: 'pendente' | 'concluido';  // Para filtrar agenda
-  apelido?: string;      // ✅ NOVO: para locais favoritos
+  apelido?: string;      // Para locais favoritos
+  // ✅ NOVO: Recorrência
+  recorrencia?: {
+    frequencia: 'diario' | 'semanal' | 'mensal';
+    intervalo?: number;       // A cada X (padrão 1)
+    dias_semana?: number[];   // [0-6] para semanal
+    dia_mes?: number;         // 1-31 para mensal
+    duracao?: string;         // "3 meses", "10 vezes", "fim do ano"
+  };
 }
 
 serve(async (req) => {
@@ -425,6 +434,59 @@ IMPORTANTE LOCAIS:
 - Apelidos: lowercase, máx 50 caracteres
 - Endereço: máx 200 caracteres
 - Um apelido por usuário (substitui se já existe)
+
+=== EVENTOS RECORRENTES ===
+
+CRIAR EVENTO RECORRENTE:
+Comandos: 'toda [frequência] [hora]: [evento]', 'todo dia', 'toda semana', 'a cada'
+
+Formato criar_recorrente:
+{
+  "acao": "criar_recorrente",
+  "titulo": "nome do evento",
+  "hora": "HH:MM",
+  "tipo": "tarefa|compromisso|saude",
+  "recorrencia": {
+    "frequencia": "diario|semanal|mensal",
+    "intervalo": 1,
+    "dias_semana": [1, 3, 5] ou null,
+    "dia_mes": 15 ou null
+  },
+  "resposta": "🔁 Criando evento recorrente..."
+}
+
+EXEMPLOS RECORRÊNCIA:
+
+DIÁRIO:
+- 'todo dia 20h: tomar remédio' → {"acao": "criar_recorrente", "titulo": "tomar remédio", "hora": "20:00", "tipo": "saude", "recorrencia": {"frequencia": "diario"}}
+- 'todo dia às 8h: café' → frequencia diario, hora 08:00
+
+SEMANAL:
+- 'toda segunda 9h: academia' → {"acao": "criar_recorrente", "titulo": "academia", "hora": "09:00", "tipo": "tarefa", "recorrencia": {"frequencia": "semanal", "dias_semana": [1]}}
+- 'toda segunda e quarta 14h: inglês' → dias_semana: [1, 3]
+- 'toda sexta 18h: pizza' → dias_semana: [5]
+- 'toda terça e quinta 16h: natação' → dias_semana: [2, 4]
+
+MENSAL:
+- 'todo dia 5 às 10h: pagar contas' → {"acao": "criar_recorrente", "titulo": "pagar contas", "hora": "10:00", "tipo": "tarefa", "recorrencia": {"frequencia": "mensal", "dia_mes": 5}}
+- 'primeiro dia do mês 9h: reunião' → dia_mes: 1
+
+INTERVALO:
+- 'a cada 2 dias' → intervalo: 2, frequencia: diario
+- 'a cada 2 semanas' → intervalo: 2, frequencia: semanal
+
+MAPEAMENTO DIAS DA SEMANA:
+domingo: 0, segunda: 1, terça: 2, quarta: 3, quinta: 4, sexta: 5, sábado: 6
+
+CONFIRMAR RECORRENTE (após usuário informar duração):
+Se contexto mostra criar_recorrente pendente e mensagem indica duração:
+- "3 meses", "10 vezes", "até dezembro", "fim do ano" → {"acao": "confirmar_recorrente"}
+
+IMPORTANTE RECORRÊNCIA:
+- Se não especificar duração, SEMPRE perguntar "Até quando?" ou "Quantas vezes?"
+- Limite: máximo 100 ocorrências ou 2 anos
+- Horário obrigatório para eventos recorrentes
+- Emoji 🔁 para indicar evento recorrente
 
 DATAS:
 - HOJE: ${dataHoje}
