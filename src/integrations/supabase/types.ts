@@ -83,10 +83,12 @@ export type Database = {
           criado_em: string | null
           data: string
           descricao: string | null
+          eh_recorrente: boolean | null
           endereco: string | null
           id: string
           lembretes: Json | null
           pessoa: string | null
+          recorrencia_id: string | null
           status: string | null
           tipo: string
           titulo: string
@@ -97,10 +99,12 @@ export type Database = {
           criado_em?: string | null
           data: string
           descricao?: string | null
+          eh_recorrente?: boolean | null
           endereco?: string | null
           id?: string
           lembretes?: Json | null
           pessoa?: string | null
+          recorrencia_id?: string | null
           status?: string | null
           tipo: string
           titulo: string
@@ -111,16 +115,124 @@ export type Database = {
           criado_em?: string | null
           data?: string
           descricao?: string | null
+          eh_recorrente?: boolean | null
           endereco?: string | null
           id?: string
           lembretes?: Json | null
           pessoa?: string | null
+          recorrencia_id?: string | null
           status?: string | null
           tipo?: string
           titulo?: string
           usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "eventos_recorrencia_id_fkey"
+            columns: ["recorrencia_id"]
+            isOneToOne: false
+            referencedRelation: "eventos_recorrencia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventos_ocorrencia: {
+        Row: {
+          criado_em: string | null
+          data_ocorrencia: string
+          evento_id: string
+          excluido: boolean | null
+          id: string
+          recorrencia_id: string
+        }
+        Insert: {
+          criado_em?: string | null
+          data_ocorrencia: string
+          evento_id: string
+          excluido?: boolean | null
+          id?: string
+          recorrencia_id: string
+        }
+        Update: {
+          criado_em?: string | null
+          data_ocorrencia?: string
+          evento_id?: string
+          excluido?: boolean | null
+          id?: string
+          recorrencia_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventos_ocorrencia_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventos_ocorrencia_recorrencia_id_fkey"
+            columns: ["recorrencia_id"]
+            isOneToOne: false
+            referencedRelation: "eventos_recorrencia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventos_recorrencia: {
+        Row: {
+          ativo: boolean | null
+          atualizado_em: string | null
+          criado_em: string | null
+          data_fim: string | null
+          data_inicio: string
+          dia_mes: number | null
+          dias_semana: number[] | null
+          evento_original_id: string
+          frequencia: string
+          id: string
+          intervalo: number | null
+          numero_ocorrencias: number | null
+          usuario_id: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          atualizado_em?: string | null
+          criado_em?: string | null
+          data_fim?: string | null
+          data_inicio: string
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          evento_original_id: string
+          frequencia: string
+          id?: string
+          intervalo?: number | null
+          numero_ocorrencias?: number | null
+          usuario_id: string
+        }
+        Update: {
+          ativo?: boolean | null
+          atualizado_em?: string | null
+          criado_em?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          evento_original_id?: string
+          frequencia?: string
+          id?: string
+          intervalo?: number | null
+          numero_ocorrencias?: number | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventos_recorrencia_evento_original_id_fkey"
+            columns: ["evento_original_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       lembretes_enviados: {
         Row: {
