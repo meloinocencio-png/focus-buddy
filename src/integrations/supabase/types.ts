@@ -192,6 +192,33 @@ export type Database = {
           },
         ]
       }
+      locais_favoritos: {
+        Row: {
+          apelido: string
+          atualizado_em: string | null
+          criado_em: string | null
+          endereco: string
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          apelido: string
+          atualizado_em?: string | null
+          criado_em?: string | null
+          endereco: string
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          apelido?: string
+          atualizado_em?: string | null
+          criado_em?: string | null
+          endereco?: string
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       notificacoes: {
         Row: {
           criada_em: string | null
