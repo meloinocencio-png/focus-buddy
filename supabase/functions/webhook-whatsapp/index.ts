@@ -371,6 +371,41 @@ async function gerarOcorrencias(
   return ocorrencias;
 }
 
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Calcular próximo intervalo (escala progressiva)
+// ═══════════════════════════════════════════════════════════
+function calcularProximoIntervalo(intervaloAtual: number, tentativas: number): number {
+  // Escala: 3h → 6h → 12h → 24h (manhã seguinte)
+  
+  if (tentativas === 0) {
+    return 180; // 3 horas
+  } else if (tentativas === 1) {
+    return 360; // 6 horas
+  } else if (tentativas === 2) {
+    return 720; // 12 horas
+  } else {
+    // 3+ tentativas: sempre manhã seguinte (9h do dia seguinte)
+    const agora = new Date();
+    const amanha9h = new Date();
+    amanha9h.setDate(amanha9h.getDate() + 1);
+    amanha9h.setHours(9, 0, 0, 0);
+    
+    const minutosAteAmanha = Math.ceil((amanha9h.getTime() - agora.getTime()) / (1000 * 60));
+    return Math.max(minutosAteAmanha, 60); // Mínimo 1h
+  }
+}
+
+function formatarIntervalo(minutos: number): string {
+  if (minutos < 60) {
+    return `em ${minutos} minutos`;
+  } else if (minutos < 1440) {
+    const horas = Math.floor(minutos / 60);
+    return `daqui ${horas}h`;
+  } else {
+    return 'amanhã de manhã (9h)';
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1848,6 +1883,163 @@ serve(async (req) => {
           userId,
           acaoPendente.evento
         );
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: CRIAR LEMBRETE PERSISTENTE
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'criar_lembrete') {
+      console.log('🔔 Criando lembrete persistente:', maluResponse.titulo);
+      
+      if (!maluResponse.titulo) {
+        respostaFinal = '❌ Me diga o que precisa lembrar.\nEx: "lembra de comprar leite"';
+      } else {
+        // Criar evento do tipo lembrete (sem hora específica)
+        const dataLembrete = new Date();
+        dataLembrete.setHours(12, 0, 0, 0); // Meio-dia padrão (simbólico)
+        
+        const { data: evento, error: eventoError } = await supabase
+          .from('eventos')
+          .insert([{
+            usuario_id: userId,
+            tipo: 'lembrete',
+            titulo: maluResponse.titulo,
+            data: dataLembrete.toISOString(),
+            status: 'pendente',
+            eh_recorrente: false
+          }])
+          .select()
+          .single();
+        
+        if (eventoError) {
+          console.error('Erro ao criar lembrete:', eventoError);
+          respostaFinal = '❌ Erro ao criar lembrete.';
+        } else {
+          // Criar follow-up
+          const proximaPergunta = new Date();
+          proximaPergunta.setHours(proximaPergunta.getHours() + 3); // Primeira pergunta em 3h
+          
+          const dataLimite = new Date();
+          dataLimite.setDate(dataLimite.getDate() + 7); // Máximo 7 dias
+          
+          const { error: followupError } = await supabase
+            .from('lembretes_followup')
+            .insert([{
+              evento_id: evento.id,
+              usuario_id: userId,
+              whatsapp: phone,
+              tentativas: 0,
+              proxima_pergunta: proximaPergunta.toISOString(),
+              intervalo_atual: 180, // 3 horas em minutos
+              max_tentativas: 10,
+              max_dias: 7,
+              data_limite: dataLimite.toISOString(),
+              ativo: true,
+              concluido: false
+            }]);
+          
+          if (followupError) {
+            console.error('Erro ao criar follow-up:', followupError);
+            respostaFinal = '❌ Erro ao configurar lembrete.';
+          } else {
+            console.log(`✅ Lembrete criado com follow-up: ${evento.id}`);
+            
+            const horaStr = `${proximaPergunta.getHours()}h${proximaPergunta.getMinutes().toString().padStart(2, '0')}`;
+            
+            respostaFinal = `✅ *Lembrete criado:*\n📝 ${maluResponse.titulo}\n\n💡 Vou perguntar daqui 3h (${horaStr}) se você fez!`;
+          }
+        }
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: RESPONDER A LEMBRETE (sim/não)
+    // ═══════════════════════════════════════════════════════════
+    else if (maluResponse.acao === 'responder_lembrete') {
+      console.log('💬 Resposta a lembrete:', maluResponse.resposta_lembrete);
+      
+      // Buscar último follow-up ativo para este usuário
+      const { data: followups } = await supabase
+        .from('lembretes_followup')
+        .select(`
+          *,
+          eventos!inner(id, titulo, tipo)
+        `)
+        .eq('usuario_id', userId)
+        .eq('ativo', true)
+        .eq('concluido', false)
+        .order('ultima_pergunta', { ascending: false })
+        .limit(1);
+      
+      if (!followups || followups.length === 0) {
+        respostaFinal = '🤔 Não encontrei lembrete ativo. Do que você está falando?';
+      } else {
+        const followup = followups[0];
+        const evento = followup.eventos as any;
+        
+        // Salvar resposta no histórico
+        await supabase.from('lembretes_respostas').insert([{
+          followup_id: followup.id,
+          evento_id: evento.id,
+          resposta_usuario: message,
+          resposta_classificada: maluResponse.resposta_lembrete
+        }]);
+        
+        if (maluResponse.resposta_lembrete === 'sim') {
+          // ✅ CONCLUÍDO!
+          await supabase
+            .from('lembretes_followup')
+            .update({ 
+              concluido: true, 
+              ativo: false 
+            })
+            .eq('id', followup.id);
+          
+          await supabase
+            .from('eventos')
+            .update({ status: 'concluido' })
+            .eq('id', evento.id);
+          
+          console.log(`✅ Lembrete concluído: ${evento.titulo}`);
+          
+          respostaFinal = `🎉 Ótimo! *${evento.titulo}* marcado como feito!\n\n✅ Lembrete concluído`;
+          
+        } else if (maluResponse.resposta_lembrete === 'nao') {
+          // ❌ NÃO FEZ - Escalar intervalo
+          const novoIntervalo = calcularProximoIntervalo(followup.intervalo_atual, followup.tentativas);
+          const proximaPergunta = new Date();
+          proximaPergunta.setMinutes(proximaPergunta.getMinutes() + novoIntervalo);
+          
+          // Verificar se passou do limite de 7 dias
+          const dataLimite = new Date(followup.data_limite);
+          if (proximaPergunta > dataLimite) {
+            // Expirou
+            await supabase
+              .from('lembretes_followup')
+              .update({ ativo: false })
+              .eq('id', followup.id);
+            
+            respostaFinal = `⏰ Ok! Esse lembrete expirou (7 dias).\n\nQuer criar um novo?`;
+          } else {
+            // Reagendar
+            await supabase
+              .from('lembretes_followup')
+              .update({
+                tentativas: followup.tentativas + 1,
+                ultima_pergunta: new Date().toISOString(),
+                proxima_pergunta: proximaPergunta.toISOString(),
+                intervalo_atual: novoIntervalo
+              })
+              .eq('id', followup.id);
+            
+            console.log(`⏰ Reagendado: ${evento.titulo} para daqui ${novoIntervalo}min`);
+            
+            let tempoTexto = formatarIntervalo(novoIntervalo);
+            
+            respostaFinal = `✅ Sem problema!\n\n⏰ Vou perguntar ${tempoTexto}`;
+          }
+        } else {
+          respostaFinal = '🤔 Não entendi. Você fez ou não?';
+        }
       }
     }
 

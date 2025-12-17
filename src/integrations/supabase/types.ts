@@ -272,6 +272,110 @@ export type Database = {
           },
         ]
       }
+      lembretes_followup: {
+        Row: {
+          ativo: boolean | null
+          atualizado_em: string | null
+          concluido: boolean | null
+          criado_em: string | null
+          data_limite: string | null
+          evento_id: string
+          id: string
+          intervalo_atual: number | null
+          max_dias: number | null
+          max_tentativas: number | null
+          proxima_pergunta: string
+          tentativas: number | null
+          ultima_pergunta: string | null
+          usuario_id: string
+          whatsapp: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          atualizado_em?: string | null
+          concluido?: boolean | null
+          criado_em?: string | null
+          data_limite?: string | null
+          evento_id: string
+          id?: string
+          intervalo_atual?: number | null
+          max_dias?: number | null
+          max_tentativas?: number | null
+          proxima_pergunta: string
+          tentativas?: number | null
+          ultima_pergunta?: string | null
+          usuario_id: string
+          whatsapp: string
+        }
+        Update: {
+          ativo?: boolean | null
+          atualizado_em?: string | null
+          concluido?: boolean | null
+          criado_em?: string | null
+          data_limite?: string | null
+          evento_id?: string
+          id?: string
+          intervalo_atual?: number | null
+          max_dias?: number | null
+          max_tentativas?: number | null
+          proxima_pergunta?: string
+          tentativas?: number | null
+          ultima_pergunta?: string | null
+          usuario_id?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lembretes_followup_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lembretes_respostas: {
+        Row: {
+          evento_id: string
+          followup_id: string
+          id: string
+          respondido_em: string | null
+          resposta_classificada: string | null
+          resposta_usuario: string
+        }
+        Insert: {
+          evento_id: string
+          followup_id: string
+          id?: string
+          respondido_em?: string | null
+          resposta_classificada?: string | null
+          resposta_usuario: string
+        }
+        Update: {
+          evento_id?: string
+          followup_id?: string
+          id?: string
+          respondido_em?: string | null
+          resposta_classificada?: string | null
+          resposta_usuario?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lembretes_respostas_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lembretes_respostas_followup_id_fkey"
+            columns: ["followup_id"]
+            isOneToOne: false
+            referencedRelation: "lembretes_followup"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lembretes_snooze: {
         Row: {
           criado_em: string | null
