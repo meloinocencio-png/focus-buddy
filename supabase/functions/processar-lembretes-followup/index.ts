@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, calcularProximoIntervaloSimples } from "../_shared/utils.ts";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -104,8 +100,8 @@ serve(async (req) => {
         );
         
         if (zapiResponse.ok) {
-          // Calcular próximo intervalo
-          const novoIntervalo = calcularProximoIntervalo(followup.tentativas);
+          // Calcular próximo intervalo usando função compartilhada
+          const novoIntervalo = calcularProximoIntervaloSimples(followup.tentativas);
           const proximaPergunta = new Date();
           proximaPergunta.setMinutes(proximaPergunta.getMinutes() + novoIntervalo);
           
@@ -168,27 +164,3 @@ serve(async (req) => {
     });
   }
 });
-
-// ═══════════════════════════════════════════════════════════
-// FUNÇÃO: Calcular próximo intervalo (escala progressiva)
-// ═══════════════════════════════════════════════════════════
-function calcularProximoIntervalo(tentativas: number): number {
-  // Escala: 3h → 6h → 12h → 24h (manhã seguinte)
-  
-  if (tentativas === 0) {
-    return 180; // 3 horas
-  } else if (tentativas === 1) {
-    return 360; // 6 horas
-  } else if (tentativas === 2) {
-    return 720; // 12 horas
-  } else {
-    // 3+ tentativas: sempre manhã seguinte (9h do dia seguinte)
-    const agora = new Date();
-    const amanha9h = new Date();
-    amanha9h.setDate(amanha9h.getDate() + 1);
-    amanha9h.setHours(9, 0, 0, 0);
-    
-    const minutosAteAmanha = Math.ceil((amanha9h.getTime() - agora.getTime()) / (1000 * 60));
-    return Math.max(minutosAteAmanha, 60); // Mínimo 1h
-  }
-}
