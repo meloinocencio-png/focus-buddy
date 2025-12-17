@@ -6,16 +6,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper: Calcular tempo de viagem via edge function
+async function calcularTempoViagem(
+  supabaseUrl: string,
+  supabaseKey: string,
+  evento: any
+): Promise<{ tempo_viagem_minutos: number; distancia_km: number; status_trafego: string } | null> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/calcular-tempo-viagem`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        evento_id: evento.id,
+        destino: evento.endereco,
+        data_hora: evento.data,
+        origem: evento.origem_viagem
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`❌ Erro ao calcular viagem: ${response.status}`);
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('❌ Erro na chamada de tempo de viagem:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const agora = new Date();
     const hoje = agora.toISOString().split('T')[0];
@@ -45,7 +77,45 @@ serve(async (req) => {
 
     console.log(`📅 Encontrados ${eventos?.length || 0} eventos`);
 
-    for (const evento of eventos || []) {
+    // ═══════════════════════════════════════════════════════════
+    // PRÉ-PROCESSAR: Calcular tempo de viagem para eventos próximos
+    // ═══════════════════════════════════════════════════════════
+    const eventosComEndereco = (eventos || []).filter(e => 
+      e.endereco && 
+      e.tipo !== 'aniversario' &&
+      e.status !== 'cancelado' &&
+      e.status !== 'concluido'
+    );
+
+    for (const evento of eventosComEndereco) {
+      const dataEvento = new Date(evento.data);
+      const horasAteEvento = (dataEvento.getTime() - agora.getTime()) / (1000 * 60 * 60);
+      
+      // Calcular apenas se evento nas próximas 4 horas
+      if (horasAteEvento > 0 && horasAteEvento <= 4) {
+        // Verificar se já calculou recentemente (última hora)
+        const ultimoCalculo = evento.ultimo_calculo_viagem 
+          ? new Date(evento.ultimo_calculo_viagem) 
+          : null;
+        
+        const precisaRecalcular = !ultimoCalculo || 
+          (agora.getTime() - ultimoCalculo.getTime()) > 60 * 60 * 1000; // 1 hora
+        
+        if (precisaRecalcular) {
+          console.log(`🚗 Calculando viagem para: ${evento.titulo}`);
+          await calcularTempoViagem(supabaseUrl, supabaseKey, evento);
+        }
+      }
+    }
+
+    // Recarregar eventos com dados de viagem atualizados
+    const { data: eventosAtualizados } = await supabase
+      .from('eventos')
+      .select('*')
+      .gte('data', hoje)
+      .lte('data', dataLimite.toISOString().split('T')[0]);
+
+    for (const evento of eventosAtualizados || []) {
       // Buscar WhatsApp do usuário
       const { data: whatsappData } = await supabase
         .from('whatsapp_usuarios')
@@ -125,11 +195,77 @@ serve(async (req) => {
         
         console.log(`📊 Evento "${evento.titulo}": horasRestantes=${horasRestantes.toFixed(2)}h`);
 
-        // Preparar links de navegação se tiver endereço
-        let enderecoInfo = '';
-        if (evento.endereco) {
+        // ═══════════════════════════════════════════════════════════
+        // MONTAR INFORMAÇÃO DE VIAGEM (se disponível)
+        // ═══════════════════════════════════════════════════════════
+        let viagemInfo = '';
+        let horaSair = '';
+        
+        if (evento.endereco && evento.tempo_viagem_minutos) {
+          const tempoViagem = evento.tempo_viagem_minutos;
+          const tempoBuffer = 5; // 5 min de buffer
+          const tempoTotal = tempoViagem + tempoBuffer;
+          
+          // Calcular horário de saída
+          const horarioSaida = new Date(dataEvento.getTime() - tempoTotal * 60 * 1000);
+          const horaSaidaStr = `${horarioSaida.getHours().toString().padStart(2, '0')}:${horarioSaida.getMinutes().toString().padStart(2, '0')}`;
+          horaSair = horaSaidaStr;
+          
+          // Buscar dados de trânsito mais recentes (se calculados)
+          let statusTrafego = '';
+          if (evento.ultimo_calculo_viagem) {
+            // Inferir status do trânsito baseado no tempo
+            const tempoBase = tempoViagem * 0.8; // Estimar tempo base como 80% do tempo com trânsito
+            const ratio = tempoViagem / tempoBase;
+            if (ratio >= 1.5) statusTrafego = '🔴 *TRÂNSITO PESADO*';
+            else if (ratio >= 1.2) statusTrafego = '🟡 Trânsito moderado';
+            else statusTrafego = '🟢 Trânsito leve';
+          }
+          
+          // Calcular distância estimada (se não temos, estimar ~30km/h em cidade)
+          const distanciaEstimada = (tempoViagem / 60 * 30).toFixed(1);
+          
+          // Truncar endereço
+          const enderecoTruncado = evento.endereco.length > 40 
+            ? evento.endereco.substring(0, 37) + '...'
+            : evento.endereco;
+          
+          viagemInfo = `\n📍 ${enderecoTruncado} (~${distanciaEstimada}km)`;
+          if (statusTrafego) viagemInfo += `\n${statusTrafego}`;
+          viagemInfo += `\n🚗 Viagem: ~${tempoViagem}min`;
+          viagemInfo += `\n⏰ *Saia às ${horaSaidaStr}*`;
+          
+          // Adicionar links de navegação
           const enderecoEncoded = encodeURIComponent(evento.endereco);
-          enderecoInfo = `\n📍 ${evento.endereco}\n🗺️ Waze: https://waze.com/ul?q=${enderecoEncoded}&navigate=yes\n🗺️ Maps: https://www.google.com/maps/search/?api=1&query=${enderecoEncoded}`;
+          viagemInfo += `\n🗺️ https://waze.com/ul?q=${enderecoEncoded}&navigate=yes`;
+        } else if (evento.endereco) {
+          // Tem endereço mas sem tempo de viagem calculado
+          const enderecoEncoded = encodeURIComponent(evento.endereco);
+          const enderecoTruncado = evento.endereco.length > 40 
+            ? evento.endereco.substring(0, 37) + '...'
+            : evento.endereco;
+          viagemInfo = `\n📍 ${enderecoTruncado}`;
+          viagemInfo += `\n🗺️ Waze: https://waze.com/ul?q=${enderecoEncoded}&navigate=yes`;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // VERIFICAR SE PRECISA DE ALERTA ESPECIAL
+        // ═══════════════════════════════════════════════════════════
+        let alertaEspecial = '';
+        if (evento.tempo_viagem_minutos && horaSair) {
+          const [horaSairH, horaSairM] = horaSair.split(':').map(Number);
+          const dataHoraSair = new Date(dataEvento);
+          dataHoraSair.setHours(horaSairH, horaSairM, 0, 0);
+          
+          const minutosParaSair = (dataHoraSair.getTime() - agora.getTime()) / (1000 * 60);
+          
+          if (minutosParaSair < 0) {
+            alertaEspecial = '\n\n🚨 *VOCÊ JÁ ESTÁ ATRASADO!*';
+          } else if (minutosParaSair <= 5) {
+            alertaEspecial = '\n\n⚡ *SAIA AGORA!*';
+          } else if (minutosParaSair <= 15) {
+            alertaEspecial = `\n\n⏰ Saia em ${Math.ceil(minutosParaSair)} minutos!`;
+          }
         }
 
         // Somente enviar lembretes para eventos FUTUROS (horasRestantes > 0)
@@ -138,7 +274,7 @@ serve(async (req) => {
           if (horasRestantes > 2.5 && horasRestantes <= 3.5) {
             lembretes.push({
               whatsapp,
-              mensagem: `⏰ Em 3h: ${evento.titulo} (${horaFormatada})${enderecoInfo}`,
+              mensagem: `⏰ Em 3h: ${evento.titulo} (${horaFormatada})${viagemInfo}`,
               evento_id: evento.id,
               tipo: '3h'
             });
@@ -148,7 +284,7 @@ serve(async (req) => {
           if (horasRestantes > 0.75 && horasRestantes <= 1.25) {
             lembretes.push({
               whatsapp,
-              mensagem: `⏰ Em 1h: ${evento.titulo}${enderecoInfo}`,
+              mensagem: `⏰ Em 1h: ${evento.titulo}${viagemInfo}${alertaEspecial}`,
               evento_id: evento.id,
               tipo: '1h'
             });
@@ -165,6 +301,11 @@ serve(async (req) => {
             });
             
             checklistMsg += `\nTudo pronto?`;
+            
+            // Adicionar alerta de horário de saída se tiver viagem
+            if (horaSair) {
+              checklistMsg += `\n\n⏰ *Saia às ${horaSair}*`;
+            }
 
             lembretes.push({
               whatsapp,
@@ -176,9 +317,18 @@ serve(async (req) => {
           
           // ✅ NEW: Lembrete "NA HORA" (entre 0 e 10 minutos antes)
           if (horasRestantes > 0 && horasRestantes <= 0.17) { // ~10 minutos
+            let msgNaHora = `⏰ AGORA: ${evento.titulo}!`;
+            if (evento.endereco) {
+              const enderecoEncoded = encodeURIComponent(evento.endereco);
+              msgNaHora += `\n🗺️ https://waze.com/ul?q=${enderecoEncoded}&navigate=yes`;
+            }
+            if (alertaEspecial.includes('ATRASADO')) {
+              msgNaHora += alertaEspecial;
+            }
+            
             lembretes.push({
               whatsapp,
-              mensagem: `⏰ AGORA: ${evento.titulo}!${enderecoInfo}`,
+              mensagem: msgNaHora,
               evento_id: evento.id,
               tipo: '0min'
             });
@@ -244,7 +394,7 @@ serve(async (req) => {
           });
 
         enviados++;
-        console.log(`✅ Enviado: ${lembrete.mensagem}`);
+        console.log(`✅ Enviado: ${lembrete.mensagem.substring(0, 50)}...`);
       } catch (zapiError) {
         console.error(`❌ Erro ao enviar lembrete:`, zapiError);
       }

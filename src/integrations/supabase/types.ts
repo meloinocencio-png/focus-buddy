@@ -87,11 +87,14 @@ export type Database = {
           endereco: string | null
           id: string
           lembretes: Json | null
+          origem_viagem: string | null
           pessoa: string | null
           recorrencia_id: string | null
           status: string | null
+          tempo_viagem_minutos: number | null
           tipo: string
           titulo: string
+          ultimo_calculo_viagem: string | null
           usuario_id: string
         }
         Insert: {
@@ -103,11 +106,14 @@ export type Database = {
           endereco?: string | null
           id?: string
           lembretes?: Json | null
+          origem_viagem?: string | null
           pessoa?: string | null
           recorrencia_id?: string | null
           status?: string | null
+          tempo_viagem_minutos?: number | null
           tipo: string
           titulo: string
+          ultimo_calculo_viagem?: string | null
           usuario_id: string
         }
         Update: {
@@ -119,11 +125,14 @@ export type Database = {
           endereco?: string | null
           id?: string
           lembretes?: Json | null
+          origem_viagem?: string | null
           pessoa?: string | null
           recorrencia_id?: string | null
           status?: string | null
+          tempo_viagem_minutos?: number | null
           tipo?: string
           titulo?: string
+          ultimo_calculo_viagem?: string | null
           usuario_id?: string
         }
         Relationships: [
