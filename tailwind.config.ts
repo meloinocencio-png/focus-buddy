@@ -62,12 +62,16 @@ export default {
           hover: "hsl(var(--voice-button-hover))",
         },
         success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
           soft: "hsl(var(--success-soft))",
         },
         info: {
           soft: "hsl(var(--info-soft))",
         },
         warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
           soft: "hsl(var(--warning-soft))",
         },
         category: {
@@ -75,6 +79,7 @@ export default {
           health: "hsl(var(--category-health))",
           appointment: "hsl(var(--category-appointment))",
           task: "hsl(var(--category-task))",
+          reminder: "hsl(var(--category-reminder))",
         },
       },
       borderRadius: {

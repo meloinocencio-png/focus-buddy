@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
-import { Dashboard } from "@/components/Dashboard";
+import { Dashboard, DashboardRef } from "@/components/Dashboard";
 import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
 import { CentroNotificacoes } from "@/components/CentroNotificacoes";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const Index = () => {
   const [notificacoesOpen, setNotificacoesOpen] = useState(false);
   const [notificacoesCount, setNotificacoesCount] = useState(0);
   const navigate = useNavigate();
+  const dashboardRef = useRef<DashboardRef>(null);
 
   useEffect(() => {
     // Verificar tema salvo
@@ -58,8 +59,8 @@ const Index = () => {
   };
 
   const handleEventCreated = () => {
-    // Recarregar eventos no dashboard
-    window.location.reload();
+    // Recarregar eventos no dashboard usando ref
+    dashboardRef.current?.refresh();
   };
 
   if (!user) {
@@ -84,8 +85,8 @@ const Index = () => {
               <Settings className="h-5 w-5" />
             </Button>
 
-            {/* Botão de notificações temporariamente desabilitado para debug */}
-            {/* <Button
+            {/* Botão de notificações */}
+            <Button
               variant="ghost"
               size="icon"
               onClick={() => setNotificacoesOpen(true)}
@@ -100,7 +101,7 @@ const Index = () => {
                   {notificacoesCount}
                 </Badge>
               )}
-            </Button> */}
+            </Button>
 
             <Button
               variant="ghost"
@@ -124,8 +125,8 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-12">
-        {/* Notificações temporariamente desabilitadas para debug */}
-        {/* <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} /> */}
+        {/* Notificações em destaque */}
+        <NotificacoesDestaque onVerTodas={() => setNotificacoesOpen(true)} />
 
         <section className="text-center space-y-6">
           <div>
@@ -144,16 +145,16 @@ const Index = () => {
           <h2 className="text-2xl font-bold text-foreground mb-6 text-center">
             Seus Compromissos
           </h2>
-          <Dashboard />
+          <Dashboard ref={dashboardRef} />
         </section>
       </main>
 
-      {/* Centro de notificações temporariamente desabilitado para debug */}
-      {/* <CentroNotificacoes
+      {/* Centro de notificações */}
+      <CentroNotificacoes
         open={notificacoesOpen}
         onOpenChange={setNotificacoesOpen}
         onCountChange={setNotificacoesCount}
-      /> */}
+      />
     </div>
   );
 };

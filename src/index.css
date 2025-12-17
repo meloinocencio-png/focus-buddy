@@ -50,6 +50,13 @@ All colors MUST be HSL.
     --category-health: 155 45% 90%;
     --category-appointment: 200 50% 90%;
     --category-task: 260 45% 90%;
+    --category-reminder: 280 50% 90%;
+    
+    /* Status colors */
+    --success: 155 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 85% 50%;
+    --warning-foreground: 220 20% 20%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -102,6 +109,13 @@ All colors MUST be HSL.
     --category-health: 155 30% 22%;
     --category-appointment: 200 30% 22%;
     --category-task: 260 30% 25%;
+    --category-reminder: 280 30% 25%;
+    
+    /* Dark mode status colors */
+    --success: 155 50% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 70% 45%;
+    --warning-foreground: 0 0% 100%;
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;

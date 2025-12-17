@@ -1,18 +1,22 @@
 import { Card } from "./ui/card";
-import { Calendar, User, Clock, Pencil, Trash2, MapPin } from "lucide-react";
+import { Calendar, User, Clock, Pencil, Trash2, MapPin, Car, Repeat } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "./ui/button";
 import { gerarLinksNavegacao } from "@/utils/maps";
+import { Badge } from "./ui/badge";
 
 interface EventCardProps {
   id: string;
-  tipo: "aniversario" | "compromisso" | "tarefa" | "saude";
+  tipo: "aniversario" | "compromisso" | "tarefa" | "saude" | "lembrete";
   titulo: string;
   descricao?: string;
   data: Date;
   pessoa?: string;
   endereco?: string;
+  status?: "pendente" | "concluido" | "cancelado";
+  eh_recorrente?: boolean;
+  tempo_viagem_minutos?: number;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -38,21 +42,65 @@ const tipoConfig = {
     label: "Saúde",
     className: "bg-category-health border-category-health",
   },
+  lembrete: {
+    emoji: "🔔",
+    label: "Lembrete",
+    className: "bg-category-reminder border-category-reminder",
+  },
 };
 
-export const EventCard = ({ id, tipo, titulo, descricao, data, pessoa, endereco, onEdit, onDelete }: EventCardProps) => {
-  const config = tipoConfig[tipo];
+const statusConfig = {
+  pendente: { emoji: "⏳", label: "Pendente", className: "bg-warning/20 text-warning-foreground" },
+  concluido: { emoji: "✅", label: "Concluído", className: "bg-success/20 text-success-foreground" },
+  cancelado: { emoji: "❌", label: "Cancelado", className: "bg-destructive/20 text-destructive" },
+};
+
+export const EventCard = ({ 
+  id, 
+  tipo, 
+  titulo, 
+  descricao, 
+  data, 
+  pessoa, 
+  endereco, 
+  status = "pendente",
+  eh_recorrente,
+  tempo_viagem_minutos,
+  onEdit, 
+  onDelete 
+}: EventCardProps) => {
+  const config = tipoConfig[tipo] || tipoConfig.compromisso;
+  const statusInfo = statusConfig[status] || statusConfig.pendente;
   const links = endereco ? gerarLinksNavegacao(endereco) : null;
   
+  // Calcular hora de saída se tiver tempo de viagem
+  const horaSaida = tempo_viagem_minutos 
+    ? new Date(data.getTime() - (tempo_viagem_minutos + 5) * 60000) 
+    : null;
+  
   return (
-    <Card className={`p-4 border-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${config.className}`}>
+    <Card className={`p-4 border-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${config.className} ${status === 'cancelado' ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
         <div className="text-3xl">{config.emoji}</div>
         
         <div className="flex-1 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-lg text-foreground flex-1">{titulo}</h3>
+            <div className="flex items-center gap-2 flex-1">
+              <h3 className={`font-semibold text-lg text-foreground ${status === 'concluido' ? 'line-through opacity-70' : ''}`}>
+                {titulo}
+              </h3>
+              {eh_recorrente && (
+                <span className="text-primary" title="Evento recorrente">
+                  <Repeat className="h-4 w-4" />
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
+              {/* Badge de status */}
+              <Badge variant="outline" className={`text-xs ${statusInfo.className}`}>
+                {statusInfo.emoji} {statusInfo.label}
+              </Badge>
+              
               <span className="text-xs font-medium px-2 py-1 rounded-full bg-background/50">
                 {config.label}
               </span>
@@ -102,6 +150,14 @@ export const EventCard = ({ id, tipo, titulo, descricao, data, pessoa, endereco,
               </div>
             )}
           </div>
+
+          {/* Tempo de viagem */}
+          {tempo_viagem_minutos && horaSaida && (
+            <div className="flex items-center gap-2 text-sm text-primary font-medium">
+              <Car className="h-4 w-4" />
+              <span>🚗 Saia às {format(horaSaida, "HH:mm")} ({tempo_viagem_minutos} min de viagem)</span>
+            </div>
+          )}
 
           {/* Endereço com links de navegação */}
           {endereco && links && (
