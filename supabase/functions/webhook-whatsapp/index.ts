@@ -731,6 +731,52 @@ serve(async (req) => {
         }
       }
       
+      // ═══════════════════════════════════════════════════════════
+      // DETECTAR ORIGEM DA VIAGEM ("saindo de/da/do...")
+      // ═══════════════════════════════════════════════════════════
+      let origemViagem: string | null = null;
+      
+      // Patterns para detectar origem
+      const origemPatterns = [
+        /saindo\s+d[aeo]\s+(.+?)(?:\s*[,.]|$)/i,
+        /partindo\s+d[aeo]\s+(.+?)(?:\s*[,.]|$)/i,
+        /vindo\s+d[aeo]\s+(.+?)(?:\s*[,.]|$)/i,
+        /a\s+partir\s+d[aeo]\s+(.+?)(?:\s*[,.]|$)/i
+      ];
+      
+      for (const pattern of origemPatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+          let origemDetectada = match[1].trim();
+          
+          // Limpar palavras finais que não são endereço
+          origemDetectada = origemDetectada
+            .replace(/\s+(às?\s+\d+|para\s+o|no\s+dia|amanhã|hoje|segunda|terça|quarta|quinta|sexta|sábado|domingo).*/i, '')
+            .trim();
+          
+          // Verificar se é um local favorito
+          if (locaisFavoritos && locaisFavoritos.length > 0) {
+            const origemLower = origemDetectada.toLowerCase();
+            const localMatch = locaisFavoritos.find((l: any) => 
+              origemLower === l.apelido.toLowerCase() ||
+              origemLower.includes(l.apelido.toLowerCase())
+            );
+            
+            if (localMatch) {
+              origemViagem = localMatch.endereco;
+              console.log(`📍 Origem detectada (local favorito): "${origemDetectada}" → "${origemViagem}"`);
+            } else {
+              origemViagem = origemDetectada;
+              console.log(`📍 Origem detectada: "${origemViagem}"`);
+            }
+          } else {
+            origemViagem = origemDetectada;
+            console.log(`📍 Origem detectada: "${origemViagem}"`);
+          }
+          break;
+        }
+      }
+      
       // Criar evento no banco
       const eventoData: any = {
         tipo: maluResponse.tipo || 'compromisso',
@@ -740,7 +786,8 @@ serve(async (req) => {
         endereco: enderecoFinal,  // ✅ Usar endereço substituído
         lembretes: ['7d', '1d', 'hoje'],
         usuario_id: userId,
-        checklist: maluResponse.checklist || []
+        checklist: maluResponse.checklist || [],
+        origem_viagem: origemViagem  // ✅ NEW: Origem da viagem
       };
 
       // Se tem hora, adicionar ao timestamp com timezone de Brasília (-03:00)

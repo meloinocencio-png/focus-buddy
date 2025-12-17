@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.processar-snooze]
 verify_jwt = false
+
+[functions.calcular-tempo-viagem]
+verify_jwt = false
