@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.processar-lembretes-followup]
 verify_jwt = false
+
+[functions.enviar-boas-vindas]
+verify_jwt = false

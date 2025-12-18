@@ -8,6 +8,7 @@ import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
 import { CentroNotificacoes } from "@/components/CentroNotificacoes";
 import { StreakBadge } from "@/components/StreakBadge";
 import Onboarding from "@/components/Onboarding";
+import { ActivateWhatsApp } from "@/components/ActivateWhatsApp";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Moon, Sun, Bell, Settings } from "lucide-react";
@@ -20,6 +21,7 @@ const Index = () => {
   const [notificacoesOpen, setNotificacoesOpen] = useState(false);
   const [notificacoesCount, setNotificacoesCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [whatsappActivated, setWhatsappActivated] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const dashboardRef = useRef<DashboardRef>(null);
 
@@ -57,12 +59,41 @@ const Index = () => {
       }
     }
 
+    // Verificar se WhatsApp já foi ativado
+    async function checkWhatsappStatus(userId: string) {
+      // Verificar localStorage primeiro (cache)
+      const cachedActivated = localStorage.getItem('whatsapp_activated');
+      if (cachedActivated === 'true') {
+        setWhatsappActivated(true);
+        return;
+      }
+      
+      try {
+        const { data } = await supabase
+          .from('whatsapp_usuarios')
+          .select('whatsapp')
+          .eq('usuario_id', userId)
+          .maybeSingle();
+        
+        if (data?.whatsapp) {
+          localStorage.setItem('whatsapp_activated', 'true');
+          setWhatsappActivated(true);
+        } else {
+          setWhatsappActivated(false);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar WhatsApp:', error);
+        setWhatsappActivated(false);
+      }
+    }
+
     // Configurar listener de autenticação PRIMEIRO
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         checkOnboarding(session.user.id);
+        checkWhatsappStatus(session.user.id);
       }
     });
 
@@ -75,6 +106,7 @@ const Index = () => {
         navigate("/auth");
       } else {
         checkOnboarding(session.user.id);
+        checkWhatsappStatus(session.user.id);
       }
     });
 
@@ -98,13 +130,23 @@ const Index = () => {
     dashboardRef.current?.refresh();
   };
 
-  if (!user) {
-    return null; // Ou um loading spinner
+  if (!user || whatsappActivated === null) {
+    return null; // Loading state
   }
 
   // Mostrar onboarding se não foi completado
   if (showOnboarding) {
     return <Onboarding onComplete={() => setShowOnboarding(false)} />;
+  }
+
+  // Mostrar tela de ativação do WhatsApp se não ativado
+  if (!whatsappActivated) {
+    return (
+      <ActivateWhatsApp 
+        onActivated={() => setWhatsappActivated(true)}
+        userName={user.email?.split('@')[0]}
+      />
+    );
   }
 
   return (
