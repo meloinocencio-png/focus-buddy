@@ -121,7 +121,6 @@ export function getInicioHoje(): Date {
 // FUNÇÃO: Formatar hora em horário de Brasília (BRT = UTC-3)
 // ═══════════════════════════════════════════════════════════
 export function formatarHoraBRT(date: Date): string {
-  // Converter UTC para BRT (UTC-3)
   const offsetBRT = -3 * 60; // -180 minutos
   const utcTime = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
   const brtTime = utcTime + (offsetBRT * 60 * 1000);
@@ -130,4 +129,27 @@ export function formatarHoraBRT(date: Date): string {
   const hora = dateBRT.getUTCHours().toString().padStart(2, '0');
   const minuto = dateBRT.getUTCMinutes().toString().padStart(2, '0');
   return `${hora}:${minuto}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Formatar tempo restante de forma amigável
+// Ex: "3h30", "1h15", "45min"
+// ═══════════════════════════════════════════════════════════
+export function formatarTempoRestante(horasRestantes: number): string {
+  const horas = Math.floor(horasRestantes);
+  const minutos = Math.round((horasRestantes - horas) * 60);
+  
+  if (horas === 0) {
+    return `${minutos}min`;
+  } else if (minutos === 0) {
+    return `${horas}h`;
+  } else if (minutos <= 10) {
+    return `${horas}h`;
+  } else if (minutos >= 50) {
+    return `${horas + 1}h`;
+  } else if (minutos >= 25 && minutos <= 35) {
+    return `${horas}h30`;
+  } else {
+    return `${horas}h${minutos}`;
+  }
 }

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, formatarHoraBRT } from "../_shared/utils.ts";
+import { corsHeaders, formatarHoraBRT, formatarTempoRestante } from "../_shared/utils.ts";
 
 // Helper: Calcular tempo de viagem via edge function
 async function calcularTempoViagem(
@@ -265,11 +265,13 @@ serve(async (req) => {
 
         // Somente enviar lembretes para eventos FUTUROS (horasRestantes > 0)
         if (horasRestantes > 0) {
+          const tempoRestante = formatarTempoRestante(horasRestantes);
+          
           // Lembrete 3h antes
           if (horasRestantes > 2.5 && horasRestantes <= 3.5) {
             lembretes.push({
               whatsapp,
-              mensagem: `⏰ Em 3h: ${evento.titulo} (${horaFormatada})${viagemInfo}`,
+              mensagem: `⏰ Em ${tempoRestante}: ${evento.titulo} (${horaFormatada})${viagemInfo}`,
               evento_id: evento.id,
               tipo: '3h'
             });
@@ -279,7 +281,7 @@ serve(async (req) => {
           if (horasRestantes > 0.75 && horasRestantes <= 1.25) {
             lembretes.push({
               whatsapp,
-              mensagem: `⏰ Em 1h: ${evento.titulo}${viagemInfo}${alertaEspecial}`,
+              mensagem: `⏰ Em ${tempoRestante}: ${evento.titulo}${viagemInfo}${alertaEspecial}`,
               evento_id: evento.id,
               tipo: '1h'
             });
@@ -288,7 +290,7 @@ serve(async (req) => {
           // CHECKLIST - 30 minutos antes (somente se tem checklist)
           const checklist = evento.checklist as string[] | null;
           if (checklist && checklist.length > 0 && horasRestantes > 0.4 && horasRestantes <= 0.6) {
-            let checklistMsg = `⏰ ${evento.titulo} em 30 minutos!\n\n`;
+            let checklistMsg = `⏰ ${evento.titulo} em ${tempoRestante}!\n\n`;
             checklistMsg += `📋 Já pegou:\n`;
             
             checklist.forEach((item: string) => {
