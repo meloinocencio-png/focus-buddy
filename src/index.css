@@ -162,6 +162,23 @@ All colors MUST be HSL.
   }
 }
 
+/* Animações para Onboarding (substituem framer-motion) */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce-once {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
 @layer utilities {
   .animate-bounce-in {
     animation: bounce-in 0.5s ease-out;
@@ -169,5 +186,13 @@ All colors MUST be HSL.
   
   .animate-fade-in {
     animation: fade-in 0.3s ease-out;
+  }
+  
+  .animate-fadeInUp {
+    animation: fadeInUp 0.3s ease-out forwards;
+  }
+  
+  .animate-bounce-once {
+    animation: bounce-once 0.5s ease-out;
   }
 }
