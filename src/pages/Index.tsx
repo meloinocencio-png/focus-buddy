@@ -31,16 +31,39 @@ const Index = () => {
       document.documentElement.classList.add("dark");
     }
 
-    // Verificar se onboarding foi completado
-    const onboardingCompleted = localStorage.getItem("malu_onboarding_completed");
-    if (!onboardingCompleted) {
-      setShowOnboarding(true);
+    // Verificar onboarding - DB primeiro, localStorage como fallback
+    async function checkOnboarding(userId: string) {
+      try {
+        // Verificar no DB (usuario_stats)
+        const { data: stats } = await supabase
+          .from('usuario_stats')
+          .select('onboarding_completed_at')
+          .eq('usuario_id', userId)
+          .maybeSingle();
+        
+        if (stats?.onboarding_completed_at) {
+          // Já completou - sincronizar localStorage
+          localStorage.setItem('malu_onboarding_completed', 'true');
+          setShowOnboarding(false);
+        } else {
+          // Verificar localStorage como fallback
+          const cached = localStorage.getItem('malu_onboarding_completed');
+          setShowOnboarding(!cached);
+        }
+      } catch (error) {
+        // Fallback para localStorage em caso de erro
+        const cached = localStorage.getItem('malu_onboarding_completed');
+        setShowOnboarding(!cached);
+      }
     }
 
     // Configurar listener de autenticação PRIMEIRO
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        checkOnboarding(session.user.id);
+      }
     });
 
     // DEPOIS verificar sessão existente
@@ -50,6 +73,8 @@ const Index = () => {
       
       if (!session) {
         navigate("/auth");
+      } else {
+        checkOnboarding(session.user.id);
       }
     });
 

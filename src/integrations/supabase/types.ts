@@ -487,7 +487,10 @@ export type Database = {
           atualizado_em: string | null
           criado_em: string | null
           dias_seguidos: number | null
+          first_event_source: string | null
           melhor_sequencia: number | null
+          onboarding_completed_at: string | null
+          onboarding_skipped: boolean | null
           total_concluidos: number | null
           ultima_atividade: string | null
           usuario_id: string
@@ -496,7 +499,10 @@ export type Database = {
           atualizado_em?: string | null
           criado_em?: string | null
           dias_seguidos?: number | null
+          first_event_source?: string | null
           melhor_sequencia?: number | null
+          onboarding_completed_at?: string | null
+          onboarding_skipped?: boolean | null
           total_concluidos?: number | null
           ultima_atividade?: string | null
           usuario_id: string
@@ -505,7 +511,10 @@ export type Database = {
           atualizado_em?: string | null
           criado_em?: string | null
           dias_seguidos?: number | null
+          first_event_source?: string | null
           melhor_sequencia?: number | null
+          onboarding_completed_at?: string | null
+          onboarding_skipped?: boolean | null
           total_concluidos?: number | null
           ultima_atividade?: string | null
           usuario_id?: string
