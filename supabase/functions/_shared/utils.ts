@@ -153,3 +153,52 @@ export function formatarTempoRestante(horasRestantes: number): string {
     return `${horas}h${minutos}`;
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Anti-Spam Inteligente por Leitura
+// Verifica se pode enviar lembrete ao usuário baseado em:
+// - Lembretes críticos SEMPRE enviam
+// - Se última mensagem foi lida → pode enviar
+// - Janela anti-spam de 2h para não-críticos
+// - Fallback de 6h se webhook de leitura falhar
+// ═══════════════════════════════════════════════════════════
+export async function podeEnviarLembreteUsuario(
+  supabase: any,
+  usuarioId: string,
+  ehCritico: boolean
+): Promise<boolean> {
+  // Lembretes críticos (1h, 3h) SEMPRE enviam
+  if (ehCritico) return true;
+
+  // Buscar última mensagem enviada ao usuário
+  const { data: ultimo, error } = await supabase
+    .from('lembretes_enviados')
+    .select('*')
+    .eq('usuario_id', usuarioId)
+    .order('enviado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Se erro ou nunca enviou → pode enviar
+  if (error || !ultimo) return true;
+
+  // Se última foi lida → pode enviar
+  if (ultimo.lido_em) return true;
+
+  const minutosDesde = (Date.now() - new Date(ultimo.enviado_em).getTime()) / (1000 * 60);
+
+  // Janela anti-spam: 2 horas sem leitura → bloquear
+  if (minutosDesde < 120) {
+    console.log(`⏸️ Anti-spam: bloqueado (${Math.round(minutosDesde)}min desde último, não lido)`);
+    return false;
+  }
+
+  // Fallback seguro: 6h sem leitura → enviar mesmo assim
+  if (minutosDesde >= 360) {
+    console.log(`✅ Anti-spam: fallback 6h atingido, enviando`);
+    return true;
+  }
+
+  // Entre 2h e 6h: bloquear
+  return false;
+}

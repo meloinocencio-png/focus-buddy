@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, formatarHoraBRT, formatarTempoRestante } from "../_shared/utils.ts";
+import { corsHeaders, formatarHoraBRT, formatarTempoRestante, podeEnviarLembreteUsuario } from "../_shared/utils.ts";
 
 // Helper: Calcular tempo de viagem via edge function
 async function calcularTempoViagem(
@@ -52,6 +52,7 @@ serve(async (req) => {
       mensagem: string;
       evento_id: string;
       tipo: string;
+      usuario_id: string;
     }> = [];
 
     console.log(`🔔 Verificando lembretes em ${agora.toISOString()}`);
@@ -151,7 +152,8 @@ serve(async (req) => {
             whatsapp,
             mensagem: `🎂 Próxima semana: aniversário de ${evento.pessoa} (dia ${dataFormatada})\n\n📋 Lembrete:\n□ Presente comprado?\n□ Cartão/mensagem?\n□ Confirmou presença?`,
             evento_id: evento.id,
-            tipo: '7d'
+            tipo: '7d',
+            usuario_id: evento.usuario_id
           });
         }
         if (diasRestantes === 3 || diasRestantes === 2) { // Range para pegar ~3 dias
@@ -159,7 +161,8 @@ serve(async (req) => {
             whatsapp,
             mensagem: `🎂 Em 3 dias: aniversário de ${evento.pessoa}`,
             evento_id: evento.id,
-            tipo: '3d'
+            tipo: '3d',
+            usuario_id: evento.usuario_id
           });
         }
         if (isAmanha) {
@@ -167,7 +170,8 @@ serve(async (req) => {
             whatsapp,
             mensagem: `🎂 Amanhã: aniversário de ${evento.pessoa}`,
             evento_id: evento.id,
-            tipo: '1d'
+            tipo: '1d',
+            usuario_id: evento.usuario_id
           });
         }
         if (isHoje) {
@@ -175,7 +179,8 @@ serve(async (req) => {
             whatsapp,
             mensagem: `🎂 Hoje: aniversário de ${evento.pessoa}!`,
             evento_id: evento.id,
-            tipo: '0d'
+            tipo: '0d',
+            usuario_id: evento.usuario_id
           });
         }
       }
@@ -273,7 +278,8 @@ serve(async (req) => {
               whatsapp,
               mensagem: `⏰ Em ${tempoRestante}: ${evento.titulo} (${horaFormatada})${viagemInfo}`,
               evento_id: evento.id,
-              tipo: '3h'
+              tipo: '3h',
+              usuario_id: evento.usuario_id
             });
           }
           
@@ -283,7 +289,8 @@ serve(async (req) => {
               whatsapp,
               mensagem: `⏰ Em ${tempoRestante}: ${evento.titulo}${viagemInfo}${alertaEspecial}`,
               evento_id: evento.id,
-              tipo: '1h'
+              tipo: '1h',
+              usuario_id: evento.usuario_id
             });
           }
 
@@ -308,7 +315,8 @@ serve(async (req) => {
               whatsapp,
               mensagem: checklistMsg,
               evento_id: evento.id,
-              tipo: '30min_checklist'
+              tipo: '30min_checklist',
+              usuario_id: evento.usuario_id
             });
           }
           
@@ -327,7 +335,8 @@ serve(async (req) => {
               whatsapp,
               mensagem: msgNaHora,
               evento_id: evento.id,
-              tipo: '0min'
+              tipo: '0min',
+              usuario_id: evento.usuario_id
             });
           }
         }
@@ -336,8 +345,10 @@ serve(async (req) => {
 
     console.log(`📨 ${lembretes.length} lembretes para enviar`);
 
-    // Enviar lembretes (evitando duplicatas)
+    // Enviar lembretes (evitando duplicatas + anti-spam)
     let enviados = 0;
+    let bloqueados = 0;
+    
     for (const lembrete of lembretes) {
       // Verificar se já foi enviado
       const { data: jaEnviado } = await supabase
@@ -349,6 +360,23 @@ serve(async (req) => {
 
       if (jaEnviado) {
         console.log(`⏭️ Lembrete já enviado: ${lembrete.tipo} para evento ${lembrete.evento_id}`);
+        continue;
+      }
+
+      // ═══════════════════════════════════════════════════════════
+      // ANTI-SPAM: Verificar se pode enviar ao usuário
+      // ═══════════════════════════════════════════════════════════
+      const ehCritico = ['1h', '0min', '30min_checklist'].includes(lembrete.tipo);
+      
+      const podeEnviar = await podeEnviarLembreteUsuario(
+        supabase, 
+        lembrete.usuario_id, 
+        ehCritico
+      );
+      
+      if (!podeEnviar) {
+        console.log(`⏸️ Anti-spam: bloqueado ${lembrete.tipo} para ${lembrete.usuario_id}`);
+        bloqueados++;
         continue;
       }
 
@@ -382,20 +410,31 @@ serve(async (req) => {
           continue;
         }
 
-        // Registrar envio
+        // Capturar messageId da resposta
+        const zapiResult = await zapiResponse.json();
+        console.log('[ZAPI SEND RESPONSE]', JSON.stringify(zapiResult));
+        
+        const messageId = zapiResult.messageId || zapiResult.id || zapiResult.message?.id;
+
+        // Registrar envio com usuario_id e zapi_message_id
         await supabase
           .from('lembretes_enviados')
           .insert({
             evento_id: lembrete.evento_id,
-            tipo_lembrete: lembrete.tipo
+            tipo_lembrete: lembrete.tipo,
+            usuario_id: lembrete.usuario_id,
+            zapi_message_id: messageId,
+            status: 'enviado'
           });
 
         enviados++;
-        console.log(`✅ Enviado: ${lembrete.mensagem.substring(0, 50)}...`);
+        console.log(`✅ Enviado: ${lembrete.mensagem.substring(0, 50)}... (msgId: ${messageId})`);
       } catch (zapiError) {
         console.error(`❌ Erro ao enviar lembrete:`, zapiError);
       }
     }
+    
+    console.log(`📊 Anti-spam: ${bloqueados} lembretes bloqueados`);
 
     // ═══════════════════════════════════════════════════════════
     // FOLLOW-UP AUTOMÁTICO PARA EVENTOS PASSADOS
@@ -473,6 +512,7 @@ serve(async (req) => {
       JSON.stringify({ 
         total_lembretes: lembretes.length,
         enviados,
+        bloqueados_antispam: bloqueados,
         followups_criados: followupsCreated,
         timestamp: agora.toISOString()
       }),
