@@ -88,7 +88,15 @@ serve(async (req) => {
     // ═══════════════════════════════════════════════════════════
     // HANDLER: Message Status Update (leitura, entrega, etc)
     // ═══════════════════════════════════════════════════════════
-    if (payload.event === 'message-status-update' || payload.status) {
+    // IMPORTANTE: Mensagens novas vêm com status: "RECEIVED" mas TÊM conteúdo (text, audio, image)
+    // Status updates reais (READ, DELIVERED, SENT) NÃO têm conteúdo de mensagem
+    const hasMessageContent = payload.text || payload.audio || payload.image;
+    const isRealStatusUpdate = payload.event === 'message-status-update' || 
+      (payload.status && 
+       ['READ', 'DELIVERED', 'SENT', 'PLAYED'].includes(payload.status.toUpperCase()) && 
+       !hasMessageContent);
+
+    if (isRealStatusUpdate) {
       const messageId = payload.messageId || payload.id || payload.key?.id;
       const status = payload.status?.toUpperCase() || '';
       
