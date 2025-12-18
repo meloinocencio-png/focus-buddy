@@ -12,6 +12,64 @@ import {
 import { buscarEventos } from "../_shared/eventos.ts";
 import { processarRecorrencia, gerarOcorrencias } from "../_shared/recorrencia.ts";
 
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Enviar Onboarding WhatsApp (3 mensagens sequenciais)
+// ═══════════════════════════════════════════════════════════
+async function enviarOnboardingWhatsApp(
+  phone: string, 
+  supabaseUrl: string, 
+  supabaseServiceKey: string
+): Promise<void> {
+  const enviarMensagem = async (msg: string) => {
+    try {
+      await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${supabaseServiceKey}` 
+        },
+        body: JSON.stringify({ phone, message: msg })
+      });
+    } catch (error) {
+      console.error('❌ Erro ao enviar mensagem de onboarding:', error);
+    }
+  };
+  
+  // MENSAGEM 1: Boas-vindas + alívio emocional
+  const msg1 = `👋 Oi! Eu sou a *Malu*!
+
+Vim te ajudar a *nunca mais esquecer* compromissos, remédios e tarefas.
+
+Você não precisa lembrar de tudo. *Eu lembro por você.* ✨`;
+
+  await enviarMensagem(msg1);
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // MENSAGEM 2: Diferencial (o que a torna especial)
+  const msg2 = `O que eu faço de diferente? 🤔
+
+🔁 *Insisto até você fazer* (Não aviso só 1 vez e esqueço)
+🧠 *Entendo você* (Texto, áudio, até foto de convite)
+🎉 *Comemoro suas conquistas* (Porque você merece!)`;
+
+  await enviarMensagem(msg2);
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // MENSAGEM 3: Call to Action (primeiro sucesso imediato)
+  const msg3 = `Vamos testar? 🚀
+
+Me fala algo tipo:
+💊 "Tomar remédio todo dia às 20h"
+📅 "Dentista terça às 14h"
+🎂 "Aniversário da Maria dia 25"
+
+Pode ser por texto ou áudio! *Vai, testa agora!* 👇`;
+
+  await enviarMensagem(msg3);
+  
+  console.log(`✅ Onboarding enviado para ${phone} (3 mensagens)`);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -161,6 +219,40 @@ serve(async (req) => {
     if (!userId) {
       console.log(`⛔ WhatsApp não autorizado: ${phone}`);
       return new Response(JSON.stringify({ status: 'unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DETECTAR PRIMEIRA CONVERSA (ONBOARDING)
+    // ═══════════════════════════════════════════════════════════
+    const { count: totalConversas } = await supabase
+      .from('conversas')
+      .select('*', { count: 'exact', head: true })
+      .eq('whatsapp_de', phone);
+
+    const ehPrimeiraConversa = (totalConversas || 0) === 0;
+
+    if (ehPrimeiraConversa) {
+      console.log('🎉 PRIMEIRA CONVERSA! Iniciando onboarding para:', phone);
+      
+      // Enviar sequência de onboarding (3 mensagens)
+      await enviarOnboardingWhatsApp(phone, supabaseUrl, supabaseServiceKey);
+      
+      // Salvar conversa de onboarding (sem lock pois é caso especial)
+      await supabase.from('conversas').insert([{
+        whatsapp_de: phone,
+        mensagem_usuario: message,
+        mensagem_malu: '[Onboarding enviado - 3 mensagens]',
+        usuario_id: userId,
+        zapi_message_id: zapiMessageId
+      }]);
+      
+      return new Response(JSON.stringify({ 
+        status: 'ok', 
+        onboarding: true,
+        message: 'Onboarding enviado com sucesso'
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -483,12 +575,73 @@ serve(async (req) => {
         }
       } else {
         console.log('✅ Evento criado:', evento);
-        // Adicionar endereço na resposta se existir
-        if (enderecoFinal) {
-          respostaFinal += `\n📍 ${enderecoFinal}`;
+        
+        // ═══════════════════════════════════════════════════════════
+        // VERIFICAR SE É PRIMEIRO EVENTO DO USUÁRIO (CELEBRAÇÃO ESPECIAL)
+        // ═══════════════════════════════════════════════════════════
+        const { count: totalEventosUsuario } = await supabase
+          .from('eventos')
+          .select('*', { count: 'exact', head: true })
+          .eq('usuario_id', userId);
+
+        const ehPrimeiroEvento = (totalEventosUsuario || 0) === 1;
+
+        if (ehPrimeiroEvento) {
+          console.log('🎉 PRIMEIRO EVENTO CRIADO! Enviando celebração...');
+          
+          // Calcular tempo até ativação
+          const { data: dadosUsuario } = await supabase
+            .from('whatsapp_usuarios')
+            .select('criado_em')
+            .eq('whatsapp', phone)
+            .single();
+          
+          const tempoAtivacaoMs = dadosUsuario?.criado_em 
+            ? Date.now() - new Date(dadosUsuario.criado_em).getTime()
+            : null;
+          const tempoAtivacaoSegundos = tempoAtivacaoMs ? Math.round(tempoAtivacaoMs / 1000) : null;
+          
+          // Registrar métrica de ativação
+          if (tempoAtivacaoSegundos !== null) {
+            await supabase
+              .from('whatsapp_usuarios')
+              .update({ 
+                primeiro_evento_criado_em: new Date().toISOString(),
+                tempo_ate_ativacao_segundos: tempoAtivacaoSegundos
+              })
+              .eq('whatsapp', phone);
+            
+            console.log(`⏱ Tempo até ativação: ${tempoAtivacaoSegundos}s`);
+          }
+          
+          // Formatar data para exibição
+          const dataEvento = evento.data ? new Date(evento.data) : null;
+          const dataFormatada = dataEvento 
+            ? dataEvento.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            : '';
+          
+          // Mensagem de celebração especial (substituir a resposta normal)
+          respostaFinal = `🎉 *PRIMEIRO LEMBRETE CRIADO!*
+
+✅ ${evento.titulo}
+📅 ${dataFormatada}
+
+Pronto! Quando chegar a hora, eu te aviso!
+
+💡 *Dica:* Você pode:
+- Criar quantos quiser
+- Falar por áudio 🎤
+- Mandar foto de convite 📸
+- Pedir "minha agenda"
+
+Relaxa, eu cuido! 😊`;
         } else {
-          // Perguntar sobre endereço se não tem
-          respostaFinal += '\n📍 Quer adicionar o endereço?';
+          // Resposta normal para eventos subsequentes
+          if (enderecoFinal) {
+            respostaFinal += `\n📍 ${enderecoFinal}`;
+          } else {
+            respostaFinal += '\n📍 Quer adicionar o endereço?';
+          }
         }
       }
     } else if (maluResponse.acao === 'confirmar_evento') {

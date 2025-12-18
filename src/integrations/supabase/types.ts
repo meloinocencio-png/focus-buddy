@@ -518,6 +518,8 @@ export type Database = {
           criado_em: string | null
           id: string
           nome: string | null
+          primeiro_evento_criado_em: string | null
+          tempo_ate_ativacao_segundos: number | null
           usuario_id: string
           whatsapp: string
         }
@@ -526,6 +528,8 @@ export type Database = {
           criado_em?: string | null
           id?: string
           nome?: string | null
+          primeiro_evento_criado_em?: string | null
+          tempo_ate_ativacao_segundos?: number | null
           usuario_id: string
           whatsapp: string
         }
@@ -534,6 +538,8 @@ export type Database = {
           criado_em?: string | null
           id?: string
           nome?: string | null
+          primeiro_evento_criado_em?: string | null
+          tempo_ate_ativacao_segundos?: number | null
           usuario_id?: string
           whatsapp?: string
         }
