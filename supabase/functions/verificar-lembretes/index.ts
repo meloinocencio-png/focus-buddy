@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/utils.ts";
+import { corsHeaders, formatarHoraBRT } from "../_shared/utils.ts";
 
 // Helper: Calcular tempo de viagem via edge function
 async function calcularTempoViagem(
@@ -182,9 +182,8 @@ serve(async (req) => {
 
       // COMPROMISSOS - lembretes 3h, 1h, 30min e na hora (somente no dia E no futuro)
       if (evento.tipo !== 'aniversario' && isHoje) {
-        const horaEvento = dataEvento.getHours();
-        const minutoEvento = dataEvento.getMinutes();
-        const horaFormatada = `${horaEvento.toString().padStart(2, '0')}:${minutoEvento.toString().padStart(2, '0')}`;
+        // ✅ FIX: Usar formatarHoraBRT para exibir hora correta de Brasília
+        const horaFormatada = formatarHoraBRT(dataEvento);
         
         // ✅ FIX: Calcular horas restantes DIRETAMENTE do timestamp do evento
         const horasRestantes = (dataEvento.getTime() - agora.getTime()) / (1000 * 60 * 60);
@@ -202,9 +201,9 @@ serve(async (req) => {
           const tempoBuffer = 5; // 5 min de buffer
           const tempoTotal = tempoViagem + tempoBuffer;
           
-          // Calcular horário de saída
+          // Calcular horário de saída (em BRT)
           const horarioSaida = new Date(dataEvento.getTime() - tempoTotal * 60 * 1000);
-          const horaSaidaStr = `${horarioSaida.getHours().toString().padStart(2, '0')}:${horarioSaida.getMinutes().toString().padStart(2, '0')}`;
+          const horaSaidaStr = formatarHoraBRT(horarioSaida);
           horaSair = horaSaidaStr;
           
           // Buscar dados de trânsito mais recentes (se calculados)

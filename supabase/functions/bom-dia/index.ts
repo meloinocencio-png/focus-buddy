@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/utils.ts";
+import { corsHeaders, formatarHoraBRT } from "../_shared/utils.ts";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -54,8 +54,9 @@ serve(async (req) => {
       if (eventosHoje && eventosHoje.length > 0) {
         const lista = eventosHoje.map(e => {
           const hora = new Date(e.data);
-          const horaFormatada = `${hora.getHours().toString().padStart(2, '0')}:${hora.getMinutes().toString().padStart(2, '0')}`;
-          const horarioTexto = hora.getHours() === 0 && hora.getMinutes() === 0 ? 'Dia todo' : horaFormatada;
+          // ✅ FIX: Usar formatarHoraBRT para exibir hora correta de Brasília
+          const horaFormatada = formatarHoraBRT(hora);
+          const horarioTexto = horaFormatada === '00:00' ? 'Dia todo' : horaFormatada;
           let item = `• ${horarioTexto} - ${e.titulo}`;
           if (e.endereco) {
             item += `\n  📍 ${e.endereco}`;
