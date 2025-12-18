@@ -25,6 +25,11 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
     trackEvent('onboarding_started');
   }, []);
 
+  // Analytics: tracking automático de steps
+  useEffect(() => {
+    trackEvent(`onboarding_view_step_${currentStep + 1}`);
+  }, [currentStep]);
+
   const steps = [
     // TELA 1: Alívio
     {
@@ -68,13 +73,12 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
 
   // Navegar entre steps (telas 1 e 2)
   const handleNext = () => {
-    trackEvent(`onboarding_view_step_${currentStep + 2}`);
     setCurrentStep(currentStep + 1);
   };
 
   // Pular onboarding
   const handleSkip = async () => {
-    trackEvent('onboarding_skip', { step: currentStep });
+    trackEvent('onboarding_skip', { step: currentStep + 1 });
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -97,7 +101,11 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
 
   // CRIAR EVENTO REAL (Tela 3)
   const handleCreateFirstEvent = async () => {
-    if (!inputValue.trim() || inputValue.trim().length < 3) {
+    // Early return para evitar duplicação
+    if (isCreating) return;
+    
+    // Validação mínimo 3 caracteres
+    if (inputValue.trim().length < 3) {
       toast.error('Digite pelo menos 3 caracteres');
       return;
     }
@@ -108,14 +116,19 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
       
+      // Data = agora + 1 hora (evita poluir agenda com "AGORA")
+      const defaultDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const tituloTrimmed = inputValue.trim();
+      
       // Criar evento simples (direto no DB, sem Claude)
+      // tipo = 'tarefa' (enum aceita: aniversario, compromisso, saude, tarefa)
       const { error: eventoError } = await supabase
         .from('eventos')
         .insert([{
           usuario_id: user.id,
           tipo: 'tarefa',
-          titulo: inputValue.trim(),
-          data: new Date().toISOString(),
+          titulo: tituloTrimmed,
+          data: defaultDate,
           status: 'pendente'
         }]);
       
@@ -148,8 +161,8 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
       // LocalStorage como cache
       localStorage.setItem('malu_onboarding_completed', 'true');
       
-      // Celebração
-      toast.success('🎉 Primeiro lembrete criado!');
+      // Celebração com toast específico
+      toast.success(`🎉 "${tituloTrimmed}" criado! Você vai receber lembretes.`);
       
       // Completar
       onComplete();
@@ -214,10 +227,14 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Digite seu primeiro lembrete..."
+                placeholder="Ex: Tomar remédio todo dia 20h"
                 className="h-14 text-lg px-4"
                 disabled={isCreating}
-                onKeyDown={(e) => e.key === 'Enter' && isInputValid && handleCreateFirstEvent()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isInputValid && !isCreating) {
+                    handleCreateFirstEvent();
+                  }
+                }}
               />
             </div>
             
