@@ -7,6 +7,7 @@ import { DayProgressWidget } from "@/components/DayProgressWidget";
 import { NotificacoesDestaque } from "@/components/NotificacoesDestaque";
 import { CentroNotificacoes } from "@/components/CentroNotificacoes";
 import { StreakBadge } from "@/components/StreakBadge";
+import Onboarding from "@/components/Onboarding";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Moon, Sun, Bell, Settings } from "lucide-react";
@@ -18,6 +19,7 @@ const Index = () => {
   const [isDark, setIsDark] = useState(false);
   const [notificacoesOpen, setNotificacoesOpen] = useState(false);
   const [notificacoesCount, setNotificacoesCount] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
   const dashboardRef = useRef<DashboardRef>(null);
 
@@ -27,6 +29,12 @@ const Index = () => {
     if (savedTheme === "dark") {
       setIsDark(true);
       document.documentElement.classList.add("dark");
+    }
+
+    // Verificar se onboarding foi completado
+    const onboardingCompleted = localStorage.getItem("malu_onboarding_completed");
+    if (!onboardingCompleted) {
+      setShowOnboarding(true);
     }
 
     // Configurar listener de autenticação PRIMEIRO
@@ -67,6 +75,11 @@ const Index = () => {
 
   if (!user) {
     return null; // Ou um loading spinner
+  }
+
+  // Mostrar onboarding se não foi completado
+  if (showOnboarding) {
+    return <Onboarding onComplete={() => setShowOnboarding(false)} />;
   }
 
   return (
