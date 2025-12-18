@@ -397,10 +397,83 @@ serve(async (req) => {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // FOLLOW-UP AUTOMÁTICO PARA EVENTOS PASSADOS
+    // ═══════════════════════════════════════════════════════════
+    const MINUTOS_DEPOIS = 15;    // Primeira pergunta 15min após passar
+    const MAX_DIAS_FOLLOWUP = 3;  // 3 dias de follow-up
+    const MAX_TENTATIVAS = 7;     // 7 tentativas máximo
+
+    // Buscar eventos que já passaram (hoje mas antes de agora - 15min)
+    const inicioDia = new Date(agora);
+    inicioDia.setHours(0, 0, 0, 0);
+    
+    const limiteBusca = new Date(agora.getTime() - MINUTOS_DEPOIS * 60 * 1000);
+
+    const { data: eventosPassados } = await supabase
+      .from('eventos')
+      .select('*')
+      .gte('data', inicioDia.toISOString())
+      .lt('data', limiteBusca.toISOString())
+      .eq('status', 'pendente')
+      .neq('tipo', 'aniversario');
+
+    console.log(`📋 Eventos passados pendentes: ${eventosPassados?.length || 0}`);
+
+    let followupsCreated = 0;
+    for (const evento of eventosPassados || []) {
+      // Buscar WhatsApp do usuário
+      const { data: whatsappData } = await supabase
+        .from('whatsapp_usuarios')
+        .select('whatsapp')
+        .eq('usuario_id', evento.usuario_id)
+        .eq('ativo', true)
+        .maybeSingle();
+
+      if (!whatsappData?.whatsapp) continue;
+
+      // Verificar se já tem follow-up ativo para este evento
+      const { data: followupExistente } = await supabase
+        .from('lembretes_followup')
+        .select('id')
+        .eq('evento_id', evento.id)
+        .eq('ativo', true)
+        .maybeSingle();
+
+      if (followupExistente) continue; // Já existe, pular
+
+      // Criar follow-up com proxima_pergunta = AGORA
+      const dataLimite = new Date(agora.getTime() + MAX_DIAS_FOLLOWUP * 24 * 60 * 60 * 1000);
+
+      const { error } = await supabase
+        .from('lembretes_followup')
+        .insert([{
+          evento_id: evento.id,
+          usuario_id: evento.usuario_id,
+          whatsapp: whatsappData.whatsapp,
+          tentativas: 0,
+          proxima_pergunta: new Date().toISOString(), // AGORA
+          intervalo_atual: 180, // 3 horas
+          max_tentativas: MAX_TENTATIVAS,
+          max_dias: MAX_DIAS_FOLLOWUP,
+          data_limite: dataLimite.toISOString(),
+          ativo: true,
+          concluido: false
+        }]);
+
+      if (!error) {
+        console.log(`✅ Follow-up criado para evento passado: ${evento.titulo}`);
+        followupsCreated++;
+      } else {
+        console.error(`❌ Erro ao criar follow-up: ${error.message}`);
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         total_lembretes: lembretes.length,
         enviados,
+        followups_criados: followupsCreated,
         timestamp: agora.toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

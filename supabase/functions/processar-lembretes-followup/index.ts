@@ -1,6 +1,38 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, calcularProximoIntervaloSimples } from "../_shared/utils.ts";
+import { corsHeaders, calcularProximoIntervaloSimples, formatarHoraBRT } from "../_shared/utils.ts";
+
+// Função para gerar mensagem variada baseada no tipo e tentativas
+function gerarMensagemFollowup(evento: any, tentativas: number, dataEvento: Date): string {
+  const horaFormatada = formatarHoraBRT(dataEvento);
+  
+  // Se é compromisso (tinha hora específica) - tipo !== 'lembrete'
+  if (evento.tipo !== 'lembrete') {
+    if (tentativas === 0) {
+      return `👋 E aí? Conseguiu fazer?\n\n📝 ${evento.titulo}\n⏰ Era às ${horaFormatada}`;
+    } else if (tentativas === 1) {
+      return `E esse compromisso? Conseguiu?\n\n📝 ${evento.titulo}`;
+    } else if (tentativas === 2) {
+      return `Ainda precisa fazer?\n\n📝 ${evento.titulo}`;
+    } else {
+      return `Lembrete: você ainda tem pendente\n\n📝 ${evento.titulo}`;
+    }
+  }
+  
+  // Lembrete sem hora (comportamento original)
+  if (tentativas === 0) {
+    return `👋 E aí? Já fez isso?\n\n📝 ${evento.titulo}`;
+  } else if (tentativas === 1) {
+    return `👋 Conseguiu fazer?\n\n📝 ${evento.titulo}`;
+  } else if (tentativas === 2) {
+    return `👋 E esse lembrete?\n\n📝 ${evento.titulo}`;
+  } else {
+    const diasPassados = Math.floor(
+      (new Date().getTime() - new Date(evento.criado_em || evento.data).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return `☀️ Bom dia!\n\n📝 Lembra disso? (dia ${diasPassados})\n${evento.titulo}`;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,12 +49,12 @@ serve(async (req) => {
     
     const agora = new Date();
     
-    // Buscar lembretes que precisam de follow-up
+    // Buscar lembretes que precisam de follow-up (inclui data do evento)
     const { data: followups, error: fetchError } = await supabase
       .from('lembretes_followup')
       .select(`
         *,
-        eventos!inner(id, titulo, tipo)
+        eventos!inner(id, titulo, tipo, data, criado_em)
       `)
       .eq('ativo', true)
       .eq('concluido', false)
@@ -66,22 +98,10 @@ serve(async (req) => {
     for (const followup of followups) {
       try {
         const evento = followup.eventos as any;
+        const dataEvento = new Date(evento.data);
         
-        // Montar mensagem de follow-up
-        let mensagem = '';
-        
-        if (followup.tentativas === 0) {
-          mensagem = `👋 E aí? Já fez isso?\n\n📝 ${evento.titulo}`;
-        } else if (followup.tentativas === 1) {
-          mensagem = `👋 Conseguiu fazer?\n\n📝 ${evento.titulo}`;
-        } else if (followup.tentativas === 2) {
-          mensagem = `👋 E esse lembrete?\n\n📝 ${evento.titulo}`;
-        } else {
-          const diasPassados = Math.floor(
-            (agora.getTime() - new Date(followup.criado_em).getTime()) / (1000 * 60 * 60 * 24)
-          );
-          mensagem = `☀️ Bom dia!\n\n📝 Lembra disso? (dia ${diasPassados})\n${evento.titulo}`;
-        }
+        // Gerar mensagem variada usando função helper
+        const mensagem = gerarMensagemFollowup(evento, followup.tentativas, dataEvento);
         
         // Enviar via Z-API
         const zapiResponse = await fetch(
@@ -105,16 +125,18 @@ serve(async (req) => {
           const proximaPergunta = new Date();
           proximaPergunta.setMinutes(proximaPergunta.getMinutes() + novoIntervalo);
           
-          // Verificar se passou do limite de 7 dias
+          // Verificar se passou do limite de dias ou tentativas
           const dataLimite = new Date(followup.data_limite);
+          const maxTentativas = followup.max_tentativas || 10;
           
-          if (proximaPergunta > dataLimite) {
+          if (proximaPergunta > dataLimite || (followup.tentativas + 1) >= maxTentativas) {
             // Marcar como inativo (expirou)
             await supabase
               .from('lembretes_followup')
               .update({ 
                 ativo: false,
-                ultima_pergunta: agora.toISOString()
+                ultima_pergunta: agora.toISOString(),
+                tentativas: followup.tentativas + 1
               })
               .eq('id', followup.id);
             
@@ -132,7 +154,7 @@ serve(async (req) => {
               .eq('id', followup.id);
           }
           
-          console.log(`✅ Follow-up enviado: ${evento.titulo}`);
+          console.log(`✅ Follow-up enviado: ${evento.titulo} (tentativa ${followup.tentativas + 1})`);
           enviados++;
         } else {
           const errorText = await zapiResponse.text();
