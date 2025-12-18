@@ -248,19 +248,31 @@ export type Database = {
           enviado_em: string | null
           evento_id: string
           id: string
+          lido_em: string | null
+          status: string | null
           tipo_lembrete: string
+          usuario_id: string | null
+          zapi_message_id: string | null
         }
         Insert: {
           enviado_em?: string | null
           evento_id: string
           id?: string
+          lido_em?: string | null
+          status?: string | null
           tipo_lembrete: string
+          usuario_id?: string | null
+          zapi_message_id?: string | null
         }
         Update: {
           enviado_em?: string | null
           evento_id?: string
           id?: string
+          lido_em?: string | null
+          status?: string | null
           tipo_lembrete?: string
+          usuario_id?: string | null
+          zapi_message_id?: string | null
         }
         Relationships: [
           {

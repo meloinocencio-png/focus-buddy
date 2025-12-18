@@ -85,6 +85,38 @@ serve(async (req) => {
     // === LOG COMPLETO DO PAYLOAD (DEBUG CRÍTICO) ===
     console.log('📦 PAYLOAD COMPLETO:', JSON.stringify(payload, null, 2));
 
+    // ═══════════════════════════════════════════════════════════
+    // HANDLER: Message Status Update (leitura, entrega, etc)
+    // ═══════════════════════════════════════════════════════════
+    if (payload.event === 'message-status-update' || payload.status) {
+      const messageId = payload.messageId || payload.id || payload.key?.id;
+      const status = payload.status?.toUpperCase() || '';
+      
+      console.log(`[ZAPI STATUS] messageId: ${messageId}, status: ${status}`);
+      
+      // Apenas READ marca como lido
+      if (status === 'READ') {
+        const { error } = await supabase
+          .from('lembretes_enviados')
+          .update({
+            lido_em: new Date().toISOString(),
+            status: 'lido'
+          })
+          .eq('zapi_message_id', messageId);
+        
+        if (error) {
+          console.error('❌ Erro ao atualizar status de leitura:', error);
+        } else {
+          console.log(`✅ Mensagem ${messageId} marcada como lida`);
+        }
+      }
+      
+      return new Response(JSON.stringify({ ok: true, type: 'status-update' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // === EXTRAIR messageId ÚNICO DO Z-API (CRÍTICO para evitar duplicatas) ===
     let zapiMessageId = payload.messageId || payload.key?.id;
     if (!zapiMessageId || zapiMessageId === 'null' || zapiMessageId === 'undefined') {
