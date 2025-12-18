@@ -116,3 +116,18 @@ export function getInicioHoje(): Date {
   hoje.setHours(0, 0, 0, 0);
   return hoje;
 }
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Formatar hora em horário de Brasília (BRT = UTC-3)
+// ═══════════════════════════════════════════════════════════
+export function formatarHoraBRT(date: Date): string {
+  // Converter UTC para BRT (UTC-3)
+  const offsetBRT = -3 * 60; // -180 minutos
+  const utcTime = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
+  const brtTime = utcTime + (offsetBRT * 60 * 1000);
+  const dateBRT = new Date(brtTime);
+  
+  const hora = dateBRT.getUTCHours().toString().padStart(2, '0');
+  const minuto = dateBRT.getUTCMinutes().toString().padStart(2, '0');
+  return `${hora}:${minuto}`;
+}
