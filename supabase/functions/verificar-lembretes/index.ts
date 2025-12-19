@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, formatarHoraBRT, formatarTempoRestante, podeEnviarLembreteUsuario } from "../_shared/utils.ts";
+import { corsHeaders, formatarHoraBRT, formatarTempoRestante, podeEnviarLembreteUsuario, getDataYYYYMMDD_Brasilia } from "../_shared/utils.ts";
 
 // Helper: Calcular tempo de viagem via edge function
 async function calcularTempoViagem(
@@ -46,7 +46,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const agora = new Date();
-    const hoje = agora.toISOString().split('T')[0];
+    const hoje = getDataYYYYMMDD_Brasilia(agora);  // ✅ PARTE 4: Usar Brasília
     const lembretes: Array<{
       whatsapp: string;
       mensagem: string;
@@ -65,7 +65,7 @@ serve(async (req) => {
       .from('eventos')
       .select('*')
       .gte('data', hoje)
-      .lte('data', dataLimite.toISOString().split('T')[0]);
+      .lte('data', getDataYYYYMMDD_Brasilia(dataLimite));  // ✅ PARTE 4: Usar Brasília
 
     if (eventosError) {
       console.error('Erro ao buscar eventos:', eventosError);
@@ -110,7 +110,7 @@ serve(async (req) => {
       .from('eventos')
       .select('*')
       .gte('data', hoje)
-      .lte('data', dataLimite.toISOString().split('T')[0]);
+      .lte('data', getDataYYYYMMDD_Brasilia(dataLimite));  // ✅ PARTE 4: Usar Brasília
 
     for (const evento of eventosAtualizados || []) {
       // Buscar WhatsApp do usuário
@@ -129,12 +129,12 @@ serve(async (req) => {
       const whatsapp = whatsappData.whatsapp;
       const dataEvento = new Date(evento.data);
       
-      // ✅ FIX: Comparar datas como strings para determinar "hoje" e "amanhã" corretamente
-      const hojeStr = agora.toISOString().split('T')[0];
-      const eventoStr = dataEvento.toISOString().split('T')[0];
+      // ✅ PARTE 4: Comparar datas em Brasília
+      const hojeStr = getDataYYYYMMDD_Brasilia(agora);
+      const eventoStr = getDataYYYYMMDD_Brasilia(dataEvento);
       const amanhaDate = new Date(agora);
       amanhaDate.setDate(amanhaDate.getDate() + 1);
-      const amanhaStr = amanhaDate.toISOString().split('T')[0];
+      const amanhaStr = getDataYYYYMMDD_Brasilia(amanhaDate);
       
       const isHoje = hojeStr === eventoStr;
       const isAmanha = amanhaStr === eventoStr;
