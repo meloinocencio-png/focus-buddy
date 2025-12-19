@@ -450,15 +450,152 @@ serve(async (req) => {
     if (ehNumero && contexto.length > 0) {
       const escolhaNum = parseInt(message.trim());
       
-      // Verificar se tem ação pendente de marcar_status
+      // ═══════════════════════════════════════════════════════════
+      // HANDLER: ESCOLHA NUMÉRICA PARA EDITAR EVENTO
+      // ═══════════════════════════════════════════════════════════
+      const acaoPendenteEditar = contexto.find((c: any) => c.acao_pendente === 'escolher_editar');
+      
+      if (acaoPendenteEditar && acaoPendenteEditar.eventos_listados) {
+        const eventosListados = acaoPendenteEditar.eventos_listados;
+        const eventoSelecionado = eventosListados.find((e: any) => e.numero === escolhaNum);
+        
+        if (eventoSelecionado) {
+          console.log(`[DEBUG] ✏️ Selecionado para editar: #${escolhaNum} = ${eventoSelecionado.titulo}`);
+          
+          // Mostrar confirmação de edição
+          const { data: evento } = await supabase
+            .from('eventos')
+            .select('data')
+            .eq('id', eventoSelecionado.id)
+            .single();
+          
+          if (evento) {
+            const d = new Date(evento.data);
+            const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+            const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+            
+            let respostaFinal = `📋 *${eventoSelecionado.titulo}*\n• ${df} às ${hf}\n\n✏️ Mudar para:\n`;
+            
+            if (acaoPendenteEditar.nova_data) {
+              const nd = new Date(acaoPendenteEditar.nova_data);
+              respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
+            }
+            if (acaoPendenteEditar.nova_hora) {
+              const [h, m] = acaoPendenteEditar.nova_hora.split(':');
+              respostaFinal += `• Hora: ${h}h${m !== '00' ? m : ''}\n`;
+            }
+            respostaFinal += `\nConfirma?`;
+            
+            // Salvar ação pendente de edição
+            const novoContexto = [{
+              acao_pendente: 'editar',
+              evento_id: eventoSelecionado.id,
+              evento_titulo: eventoSelecionado.titulo,
+              nova_data: acaoPendenteEditar.nova_data,
+              nova_hora: acaoPendenteEditar.nova_hora
+            }];
+            
+            await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+              body: JSON.stringify({ phone, message: respostaFinal })
+            });
+            
+            await supabase
+              .from('conversas')
+              .update({ mensagem_usuario: message, mensagem_malu: respostaFinal, contexto: novoContexto })
+              .eq('id', conversaId);
+            
+            return new Response(JSON.stringify({ status: 'ok', resposta: respostaFinal }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+        } else {
+          const respostaFinal = `❌ Número inválido. Escolha de 1 a ${eventosListados.length}.`;
+          await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ phone, message: respostaFinal })
+          });
+          await supabase.from('conversas').update({ mensagem_usuario: message, mensagem_malu: respostaFinal, contexto }).eq('id', conversaId);
+          return new Response(JSON.stringify({ status: 'ok' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════
+      // HANDLER: ESCOLHA NUMÉRICA PARA CANCELAR EVENTO
+      // ═══════════════════════════════════════════════════════════
+      const acaoPendenteCancelar = contexto.find((c: any) => c.acao_pendente === 'escolher_cancelar');
+      
+      if (acaoPendenteCancelar && acaoPendenteCancelar.eventos_listados) {
+        const eventosListados = acaoPendenteCancelar.eventos_listados;
+        const eventoSelecionado = eventosListados.find((e: any) => e.numero === escolhaNum);
+        
+        if (eventoSelecionado) {
+          console.log(`[DEBUG] ❌ Selecionado para cancelar: #${escolhaNum} = ${eventoSelecionado.titulo}`);
+          
+          // Mostrar confirmação de cancelamento
+          const { data: evento } = await supabase
+            .from('eventos')
+            .select('data')
+            .eq('id', eventoSelecionado.id)
+            .single();
+          
+          if (evento) {
+            const d = new Date(evento.data);
+            const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+            const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+            
+            const respostaFinal = `📋 *${eventoSelecionado.titulo}*\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
+            
+            // Salvar ação pendente de cancelamento
+            const novoContexto = [{
+              acao_pendente: 'cancelar',
+              evento_id: eventoSelecionado.id,
+              evento_titulo: eventoSelecionado.titulo
+            }];
+            
+            await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+              body: JSON.stringify({ phone, message: respostaFinal })
+            });
+            
+            await supabase
+              .from('conversas')
+              .update({ mensagem_usuario: message, mensagem_malu: respostaFinal, contexto: novoContexto })
+              .eq('id', conversaId);
+            
+            return new Response(JSON.stringify({ status: 'ok', resposta: respostaFinal }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+        } else {
+          const respostaFinal = `❌ Número inválido. Escolha de 1 a ${eventosListados.length}.`;
+          await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ phone, message: respostaFinal })
+          });
+          await supabase.from('conversas').update({ mensagem_usuario: message, mensagem_malu: respostaFinal, contexto }).eq('id', conversaId);
+          return new Response(JSON.stringify({ status: 'ok' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════
+      // HANDLER: ESCOLHA NUMÉRICA PARA MARCAR STATUS
+      // ═══════════════════════════════════════════════════════════
       const acaoPendenteStatus = contexto.find((c: any) => c.acao_pendente === 'marcar_status');
       
       if (acaoPendenteStatus) {
-        const indice = escolhaNum - 1;
+        // Suportar formato antigo (array de IDs) e novo (eventos_listados)
+        let eventosLista = acaoPendenteStatus.eventos_listados || 
+          (acaoPendenteStatus.eventos ? acaoPendenteStatus.eventos.map((id: string, idx: number) => ({ numero: idx + 1, id })) : []);
         
-        if (indice >= 0 && indice < acaoPendenteStatus.eventos.length) {
-          const eventoId = acaoPendenteStatus.eventos[indice];
-          
+        const eventoSelecionado = eventosLista.find((e: any) => e.numero === escolhaNum);
+        const eventoId = eventoSelecionado?.id || acaoPendenteStatus.eventos?.[escolhaNum - 1];
+        
+        if (eventoId) {
           // Buscar nome do evento
           const { data: eventoEscolhido } = await supabase
             .from('eventos')
@@ -505,7 +642,8 @@ serve(async (req) => {
           });
         } else {
           // Número inválido
-          const respostaFinal = '❌ Número inválido. Escolha um número da lista.';
+          const maxNum = eventosLista.length || acaoPendenteStatus.eventos?.length || 0;
+          const respostaFinal = `❌ Número inválido. Escolha de 1 a ${maxNum}.`;
           
           await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
             method: 'POST',
@@ -1143,9 +1281,9 @@ Relaxa, eu cuido! 😊`;
         }
         
       } else {
-        // Múltiplos eventos - listar para escolha
+        // Múltiplos eventos - listar para escolha COM IDs e TÍTULOS
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
-        eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
+        const eventosListados = eventosEncontrados.slice(0, 5).map((evt: any, idx: number) => {
           const d = new Date(evt.data);
           const df = new Intl.DateTimeFormat('pt-BR', {
             timeZone: 'America/Sao_Paulo',
@@ -1154,12 +1292,14 @@ Relaxa, eu cuido! 😊`;
           }).format(d);
           const hf = formatarHoraBRT(d);
           respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
+          return { numero: idx + 1, id: evt.id, titulo: evt.titulo };
         });
         respostaFinal += `\nQual editar? (número)`;
         
+        // ✅ PARTE 3: Salvar eventos_listados com id, numero e titulo
         contexto.push({
           acao_pendente: 'escolher_editar',
-          eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id),
+          eventos_listados: eventosListados,
           nova_data: maluResponse.nova_data,
           nova_hora: maluResponse.nova_hora
         });
@@ -1285,8 +1425,9 @@ Relaxa, eu cuido! 😊`;
         }
 
       } else {
+        // Múltiplos eventos - listar para escolha COM IDs e TÍTULOS
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
-        eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
+        const eventosListados = eventosEncontrados.slice(0, 5).map((evt: any, idx: number) => {
           const d = new Date(evt.data);
           const df = new Intl.DateTimeFormat('pt-BR', {
             timeZone: 'America/Sao_Paulo',
@@ -1295,12 +1436,14 @@ Relaxa, eu cuido! 😊`;
           }).format(d);
           const hf = formatarHoraBRT(d);
           respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
+          return { numero: idx + 1, id: evt.id, titulo: evt.titulo };
         });
         respostaFinal += `\nQual cancelar? (número)`;
 
+        // ✅ PARTE 3: Salvar eventos_listados com id, numero e titulo
         contexto.push({
           acao_pendente: 'escolher_cancelar',
-          eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id)
+          eventos_listados: eventosListados
         });
       }
     }
