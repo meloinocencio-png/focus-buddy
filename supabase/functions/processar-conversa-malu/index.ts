@@ -280,13 +280,21 @@ Convite → confirmar_evento tipo "aniversario" com todos dados extraídos.
 Datas passadas → usar próximo ano.
 Se não conseguir ler: {"acao": "conversar", "resposta": "Não consegui ler. Me conta os detalhes?"}
 
-═══ DATAS ═══
+═══ DATAS E HORAS ═══
 
 HOJE: ${dataHoje}
 - "amanhã" = +1 dia
 - "semana que vem" = +7 dias
-- Formato: YYYY-MM-DD e HH:MM (24h)
-- Nunca criar eventos no passado
+- Formato data: YYYY-MM-DD
+- Formato hora: HH:MM (24h, SEMPRE 2 dígitos)
+
+⚠️ CONVERSÃO DE HORAS (CRÍTICO):
+- "19h" → "19:00" (NÃO "08:30" ou "07:00")
+- "8h" → "08:00"
+- "14h30" → "14:30"
+- "às 21h" → "21:00"
+- "mudar para 17h" → nova_hora: "17:00"
+- Nunca confundir AM/PM! Use sempre formato 24h.
 
 Dias da semana: dom=0, seg=1, ter=2, qua=3, qui=4, sex=5, sab=6
 
