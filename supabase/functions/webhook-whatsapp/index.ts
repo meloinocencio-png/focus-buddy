@@ -352,61 +352,94 @@ serve(async (req) => {
       .order('criada_em', { ascending: false })
       .limit(10);
 
-    const contexto: any[] = ultimasConversas?.reverse().map(c => ({
-      usuario: c.mensagem_usuario,
-      malu: c.mensagem_malu
-    })) || [];
-
     // ═══════════════════════════════════════════════════════════
-    // DEBUG DETALHADO - CONTEXTO E AÇÕES PENDENTES
+    // RECUPERAR AÇÕES PENDENTES (buscar em TODAS as conversas recentes)
     // ═══════════════════════════════════════════════════════════
-    console.log('\n' + '='.repeat(60));
-    console.log('[DEBUG] 📚 CONTEXTO WEBHOOK - APÓS CARREGAR CONVERSAS');
-    console.log('[DEBUG] Total conversas:', ultimasConversas?.length || 0);
+    const contexto: any[] = [];
     
-    // ═══════════════════════════════════════════════════════════
-    // RECUPERAR AÇÃO PENDENTE DA ÚLTIMA CONVERSA (FIX BUG EDIÇÃO)
-    // ═══════════════════════════════════════════════════════════
+    console.log('[DEBUG] 🔍 Buscando acao_pendente em', ultimasConversas?.length || 0, 'conversas...');
+
+    // ✅ BUSCAR EM TODAS AS ÚLTIMAS 5 CONVERSAS (não só na primeira!)
     if (ultimasConversas && ultimasConversas.length > 0) {
-      // Pegar a última conversa (que agora está na posição 0 após reverse? não, antes do reverse)
-      // ultimasConversas está ordenado DESC, então [0] é a mais recente
-      const ultimaConversa = ultimasConversas[0];
+      // Limitar às 5 conversas mais recentes para evitar ações antigas
+      const conversasRecentes = ultimasConversas.slice(0, 5);
+      let acaoPendenteEncontrada = false;
       
-      console.log('[DEBUG] 📝 Última conversa:', {
-        usuario: ultimaConversa.mensagem_usuario?.substring(0, 50),
-        malu: ultimaConversa.mensagem_malu?.substring(0, 50),
-        tem_contexto: !!ultimaConversa.contexto,
-        contexto_tipo: Array.isArray(ultimaConversa.contexto) ? 'array' : typeof ultimaConversa.contexto
-      });
-      
-      if (ultimaConversa.contexto && Array.isArray(ultimaConversa.contexto)) {
-        // Buscar TODAS as ações pendentes na última conversa (inclui eventos_listados)
-        const acoesPendentes = ultimaConversa.contexto.filter((c: any) => 
-          c.acao_pendente === 'editar' || 
-          c.acao_pendente === 'cancelar' ||
-          c.acao_pendente === 'confirmar_evento_encontrado' ||
-          c.acao_pendente === 'marcar_status' ||
-          c.acao_pendente === 'escolher_editar' ||
-          c.acao_pendente === 'escolher_cancelar' ||
-          c.acao_pendente === 'confirmar_recorrente' ||
-          c.eventos_listados  // ✅ PARTE 1: Incluir qualquer contexto com eventos_listados
-        );
+      for (let i = 0; i < conversasRecentes.length; i++) {
+        const conversa = conversasRecentes[i];
         
-        if (acoesPendentes.length > 0) {
-          console.log('[DEBUG] 🔄 AÇÕES PENDENTES RECUPERADAS:', acoesPendentes.length);
-          acoesPendentes.forEach((ap: any) => {
-            console.log('[DEBUG]   └─ ação:', ap.acao_pendente, '| eventos_listados:', ap.eventos_listados?.length || 0);
-            // Adicionar ao contexto atual para processamento
-            contexto.push(ap);
-          });
-        } else {
-          console.log('[DEBUG] ℹ️ Nenhuma ação pendente encontrada no contexto da última conversa');
+        // Log para debug
+        console.log(`[DEBUG] 📋 Conversa [${i}]:`, {
+          usuario_preview: conversa.mensagem_usuario?.substring(0, 40),
+          tem_contexto: !!conversa.contexto,
+          contexto_tamanho: Array.isArray(conversa.contexto) ? conversa.contexto.length : 0
+        });
+
+        // Verificar se tem contexto
+        if (conversa.contexto && Array.isArray(conversa.contexto)) {
+          // Buscar ações pendentes
+          const acoesPendentes = conversa.contexto.filter((c: any) => 
+            c.acao_pendente === 'editar' || 
+            c.acao_pendente === 'cancelar' ||
+            c.acao_pendente === 'confirmar_evento_encontrado' ||
+            c.acao_pendente === 'marcar_status' ||
+            c.acao_pendente === 'escolher_editar' ||
+            c.acao_pendente === 'escolher_cancelar' ||
+            c.acao_pendente === 'confirmar_recorrente' ||
+            c.eventos_listados
+          );
+
+          // Se encontrou ação pendente, adicionar ao contexto e PARAR
+          if (acoesPendentes.length > 0) {
+            console.log(`[DEBUG] 🔄 AÇÃO PENDENTE ENCONTRADA na conversa [${i}]!`, {
+              tipo: acoesPendentes[0].acao_pendente,
+              evento_id: acoesPendentes[0].evento_id,
+              conversa: conversa.mensagem_usuario?.substring(0, 40)
+            });
+
+            // Adicionar TODAS as ações pendentes ao contexto
+            acoesPendentes.forEach((ap: any) => {
+              contexto.push(ap);
+            });
+
+            // ✅ PARAR após encontrar - não buscar em conversas mais antigas
+            acaoPendenteEncontrada = true;
+            break;
+          }
         }
       }
+      
+      if (!acaoPendenteEncontrada) {
+        console.log('[DEBUG] ℹ️ Nenhuma ação pendente encontrada nas últimas 5 conversas');
+      }
+
+      console.log('[DEBUG] 📚 Total de ações pendentes recuperadas:', 
+        contexto.filter((c: any) => c.acao_pendente).length
+      );
+
+      // ✅ ADICIONAR ÚLTIMAS CONVERSAS PARA HISTÓRICO (sem acao_pendente, só conversas)
+      // Usar reverse para ordem cronológica (mais antiga primeiro)
+      ultimasConversas.reverse().forEach((conv) => {
+        if (conv.mensagem_usuario && conv.mensagem_malu) {
+          contexto.push({
+            usuario: conv.mensagem_usuario,
+            malu: conv.mensagem_malu
+          });
+        }
+      });
+    } else {
+      console.log('[DEBUG] ⚠️ Nenhuma conversa anterior encontrada');
     }
 
-    console.log('[DEBUG] 📊 Contexto final:', contexto.length, 'itens');
-    console.log('='.repeat(60));
+    console.log('[DEBUG] 📚 CONTEXTO TOTAL CARREGADO:', {
+      total_itens: contexto.length,
+      tem_acao_pendente: contexto.some((c: any) => c.acao_pendente),
+      tem_eventos_listados: contexto.some((c: any) => c.eventos_listados),
+      preview: contexto.slice(0, 3).map((c: any) => ({
+        tipo: c.acao_pendente ? 'acao_pendente' : 'conversa',
+        preview: c.acao_pendente || c.usuario?.substring(0, 30)
+      }))
+    });
 
     // ═══════════════════════════════════════════════════════════
     // DETECTAR SE ÚLTIMA MENSAGEM DA MALU FOI PERGUNTA
