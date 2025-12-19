@@ -123,7 +123,6 @@ export async function buscarEventosPorPeriodo(
 // FUNÇÃO: Formatar lista de eventos para mensagem
 // ═══════════════════════════════════════════════════════════
 export function formatarListaEventos(eventos: any[], maxItens: number = 5): string {
-  const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const tipoEmoji: Record<string, string> = {
     aniversario: '🎂',
     compromisso: '📅',
@@ -136,13 +135,28 @@ export function formatarListaEventos(eventos: any[], maxItens: number = 5): stri
   
   return limitado.map((evt, i) => {
     const d = new Date(evt.data);
-    const diaSemana = diasSemana[d.getDay()];
-    const dia = d.getDate().toString().padStart(2, '0');
-    const mes = (d.getMonth() + 1).toString().padStart(2, '0');
-    const hora = d.getHours().toString().padStart(2, '0');
-    const minuto = d.getMinutes().toString().padStart(2, '0');
     const emoji = tipoEmoji[evt.tipo] || '📌';
     
-    return `${i + 1}. ${emoji} *${evt.titulo}*\n   ${diaSemana} ${dia}/${mes} às ${hora}:${minuto}`;
+    // ✅ CORRIGIDO: Usar Intl.DateTimeFormat com timezone Brasília
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(d);
+    
+    const diaSemana = parts.find(p => p.type === 'weekday')?.value || 'Seg';
+    const dia = parts.find(p => p.type === 'day')?.value || '01';
+    const mes = parts.find(p => p.type === 'month')?.value || '01';
+    const hora = parts.find(p => p.type === 'hour')?.value || '00';
+    const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+    
+    // Capitalizar primeira letra do dia da semana
+    const diaSemanaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1).replace('.', '');
+    
+    return `${i + 1}. ${emoji} *${evt.titulo}*\n   ${diaSemanaCapitalizado} ${dia}/${mes} às ${hora}:${minuto}`;
   }).join('\n\n');
 }
