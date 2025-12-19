@@ -380,20 +380,25 @@ serve(async (req) => {
       });
       
       if (ultimaConversa.contexto && Array.isArray(ultimaConversa.contexto)) {
-        // Buscar ação pendente na última conversa
-        const acaoPendente = ultimaConversa.contexto.find((c: any) => 
+        // Buscar TODAS as ações pendentes na última conversa (inclui eventos_listados)
+        const acoesPendentes = ultimaConversa.contexto.filter((c: any) => 
           c.acao_pendente === 'editar' || 
           c.acao_pendente === 'cancelar' ||
           c.acao_pendente === 'confirmar_evento_encontrado' ||
           c.acao_pendente === 'marcar_status' ||
           c.acao_pendente === 'escolher_editar' ||
-          c.acao_pendente === 'escolher_cancelar'
+          c.acao_pendente === 'escolher_cancelar' ||
+          c.acao_pendente === 'confirmar_recorrente' ||
+          c.eventos_listados  // ✅ PARTE 1: Incluir qualquer contexto com eventos_listados
         );
         
-        if (acaoPendente) {
-          console.log('[DEBUG] 🔄 AÇÃO PENDENTE RECUPERADA:', JSON.stringify(acaoPendente, null, 2));
-          // Adicionar ao contexto atual para processamento
-          contexto.push(acaoPendente);
+        if (acoesPendentes.length > 0) {
+          console.log('[DEBUG] 🔄 AÇÕES PENDENTES RECUPERADAS:', acoesPendentes.length);
+          acoesPendentes.forEach((ap: any) => {
+            console.log('[DEBUG]   └─ ação:', ap.acao_pendente, '| eventos_listados:', ap.eventos_listados?.length || 0);
+            // Adicionar ao contexto atual para processamento
+            contexto.push(ap);
+          });
         } else {
           console.log('[DEBUG] ℹ️ Nenhuma ação pendente encontrada no contexto da última conversa');
         }
@@ -449,6 +454,15 @@ serve(async (req) => {
     
     if (ehNumero && contexto.length > 0) {
       const escolhaNum = parseInt(message.trim());
+      console.log(`[DEBUG] 🔢 RESPOSTA NUMÉRICA DETECTADA: ${escolhaNum}`);
+      console.log(`[DEBUG] 📊 Contexto atual tem ${contexto.length} itens`);
+      
+      // Log detalhado das ações pendentes no contexto
+      const todasAcoesPendentes = contexto.filter((c: any) => c.acao_pendente);
+      console.log(`[DEBUG] 📋 Ações pendentes no contexto: ${todasAcoesPendentes.length}`);
+      todasAcoesPendentes.forEach((ap: any, idx: number) => {
+        console.log(`[DEBUG]   ${idx + 1}. ${ap.acao_pendente} | eventos: ${ap.eventos_listados?.length || ap.eventos?.length || 0}`);
+      });
       
       // ═══════════════════════════════════════════════════════════
       // HANDLER: ESCOLHA NUMÉRICA PARA EDITAR EVENTO
@@ -456,6 +470,7 @@ serve(async (req) => {
       const acaoPendenteEditar = contexto.find((c: any) => c.acao_pendente === 'escolher_editar');
       
       if (acaoPendenteEditar && acaoPendenteEditar.eventos_listados) {
+        console.log(`[DEBUG] ✏️ Processando escolha para EDITAR, eventos_listados: ${JSON.stringify(acaoPendenteEditar.eventos_listados)}`);
         const eventosListados = acaoPendenteEditar.eventos_listados;
         const eventoSelecionado = eventosListados.find((e: any) => e.numero === escolhaNum);
         
@@ -528,6 +543,7 @@ serve(async (req) => {
       const acaoPendenteCancelar = contexto.find((c: any) => c.acao_pendente === 'escolher_cancelar');
       
       if (acaoPendenteCancelar && acaoPendenteCancelar.eventos_listados) {
+        console.log(`[DEBUG] ❌ Processando escolha para CANCELAR, eventos_listados: ${JSON.stringify(acaoPendenteCancelar.eventos_listados)}`);
         const eventosListados = acaoPendenteCancelar.eventos_listados;
         const eventoSelecionado = eventosListados.find((e: any) => e.numero === escolhaNum);
         
@@ -807,8 +823,40 @@ INTERPRETAÇÃO CRÍTICA:
     console.log('[DEBUG]   └─ busca:', maluResponse.busca || 'N/A');
     console.log('[DEBUG]   └─ titulo:', maluResponse.titulo || 'N/A');
     console.log('[DEBUG]   └─ novo_status:', maluResponse.novo_status || 'N/A');
+    console.log('[DEBUG]   └─ nova_hora (raw):', maluResponse.nova_hora || 'N/A');
     console.log('[DEBUG]   └─ resposta_preview:', maluResponse.resposta?.substring(0, 100) || 'N/A');
     console.log('[DEBUG] 📦 RESPOSTA COMPLETA:', JSON.stringify(maluResponse, null, 2));
+    
+    // ═══════════════════════════════════════════════════════════
+    // PARTE 3: VALIDAR E CORRIGIR HORA EXTRAÍDA
+    // ═══════════════════════════════════════════════════════════
+    if (maluResponse.nova_hora || maluResponse.hora) {
+      // Tentar extrair hora diretamente da mensagem do usuário se Claude retornou algo estranho
+      const horaMsg = message.match(/(?:para|às|as)\s*(\d{1,2})\s*(?:h|:|\s)\s*(\d{2})?/i);
+      
+      if (horaMsg) {
+        const horaExtraida = horaMsg[1].padStart(2, '0');
+        const minExtraido = horaMsg[2] || '00';
+        const horaCorrigida = `${horaExtraida}:${minExtraido}`;
+        
+        // Verificar se Claude retornou hora muito diferente
+        const horaClaudeStr = maluResponse.nova_hora || maluResponse.hora;
+        const [hClaudeh, hClaudem] = (horaClaudeStr || '00:00').split(':').map((s: string) => parseInt(s) || 0);
+        const [hExtrah, hExtram] = [parseInt(horaExtraida), parseInt(minExtraido)];
+        
+        // Se diferença > 3 horas, provavelmente Claude errou
+        if (Math.abs(hClaudeh - hExtrah) > 3) {
+          console.log(`[DEBUG] ⏰ HORA CORRIGIDA: Claude disse ${horaClaudeStr}, mensagem indica ${horaCorrigida}`);
+          if (maluResponse.nova_hora) {
+            maluResponse.nova_hora = horaCorrigida;
+          }
+          if (maluResponse.hora) {
+            maluResponse.hora = horaCorrigida;
+          }
+        }
+      }
+      console.log('[DEBUG]   └─ nova_hora (final):', maluResponse.nova_hora || maluResponse.hora || 'N/A');
+    }
     console.log('='.repeat(60));
 
     let respostaFinal = maluResponse.resposta || 'Olá! Precisa de algo?';
@@ -1297,6 +1345,7 @@ Relaxa, eu cuido! 😊`;
         respostaFinal += `\nQual editar? (número)`;
         
         // ✅ PARTE 3: Salvar eventos_listados com id, numero e titulo
+        console.log(`[DEBUG] 📝 SALVANDO escolher_editar com ${eventosListados.length} eventos:`, JSON.stringify(eventosListados));
         contexto.push({
           acao_pendente: 'escolher_editar',
           eventos_listados: eventosListados,
@@ -1441,6 +1490,7 @@ Relaxa, eu cuido! 😊`;
         respostaFinal += `\nQual cancelar? (número)`;
 
         // ✅ PARTE 3: Salvar eventos_listados com id, numero e titulo
+        console.log(`[DEBUG] 📝 SALVANDO escolher_cancelar com ${eventosListados.length} eventos:`, JSON.stringify(eventosListados));
         contexto.push({
           acao_pendente: 'escolher_cancelar',
           eventos_listados: eventosListados
