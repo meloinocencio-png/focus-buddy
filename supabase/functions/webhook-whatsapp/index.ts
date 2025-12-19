@@ -356,12 +356,26 @@ serve(async (req) => {
     })) || [];
 
     // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - CONTEXTO E AÇÕES PENDENTES
+    // ═══════════════════════════════════════════════════════════
+    console.log('\n' + '='.repeat(60));
+    console.log('[DEBUG] 📚 CONTEXTO WEBHOOK - APÓS CARREGAR CONVERSAS');
+    console.log('[DEBUG] Total conversas:', ultimasConversas?.length || 0);
+    
+    // ═══════════════════════════════════════════════════════════
     // RECUPERAR AÇÃO PENDENTE DA ÚLTIMA CONVERSA (FIX BUG EDIÇÃO)
     // ═══════════════════════════════════════════════════════════
     if (ultimasConversas && ultimasConversas.length > 0) {
       // Pegar a última conversa (que agora está na posição 0 após reverse? não, antes do reverse)
       // ultimasConversas está ordenado DESC, então [0] é a mais recente
       const ultimaConversa = ultimasConversas[0];
+      
+      console.log('[DEBUG] 📝 Última conversa:', {
+        usuario: ultimaConversa.mensagem_usuario?.substring(0, 50),
+        malu: ultimaConversa.mensagem_malu?.substring(0, 50),
+        tem_contexto: !!ultimaConversa.contexto,
+        contexto_tipo: Array.isArray(ultimaConversa.contexto) ? 'array' : typeof ultimaConversa.contexto
+      });
       
       if (ultimaConversa.contexto && Array.isArray(ultimaConversa.contexto)) {
         // Buscar ação pendente na última conversa
@@ -375,14 +389,17 @@ serve(async (req) => {
         );
         
         if (acaoPendente) {
-          console.log('🔄 Ação pendente recuperada do banco:', JSON.stringify(acaoPendente));
+          console.log('[DEBUG] 🔄 AÇÃO PENDENTE RECUPERADA:', JSON.stringify(acaoPendente, null, 2));
           // Adicionar ao contexto atual para processamento
           contexto.push(acaoPendente);
+        } else {
+          console.log('[DEBUG] ℹ️ Nenhuma ação pendente encontrada no contexto da última conversa');
         }
       }
     }
 
-    console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
+    console.log('[DEBUG] 📊 Contexto final:', contexto.length, 'itens');
+    console.log('='.repeat(60));
 
     // ═══════════════════════════════════════════════════════════
     // DETECTAR SE ÚLTIMA MENSAGEM DA MALU FOI PERGUNTA
@@ -525,7 +542,9 @@ serve(async (req) => {
     // BUSCAR CONTEXTO DA MENSAGEM CITADA (REPLY) - CRÍTICO!
     // ═══════════════════════════════════════════════════════════
     if (referenceMessageId) {
-      console.log('🔍 Buscando contexto da mensagem citada:', referenceMessageId);
+      console.log('\n' + '='.repeat(60));
+      console.log('[DEBUG] ↩️ PROCESSANDO MENSAGEM CITADA (REPLY)');
+      console.log('[DEBUG] referenceMessageId:', referenceMessageId);
       
       // 1. Tentar em lembretes_enviados (mensagens de lembrete)
       const { data: lembrete } = await supabase
@@ -534,13 +553,19 @@ serve(async (req) => {
         .eq('zapi_message_id', referenceMessageId)
         .maybeSingle();
       
+      console.log('[DEBUG] Busca em lembretes_enviados:', lembrete ? 'ENCONTRADO' : 'NÃO ENCONTRADO');
+      
       if (lembrete) {
+        console.log('[DEBUG] ✅ Lembrete encontrado! evento_id:', lembrete.evento_id, 'tipo:', lembrete.tipo_lembrete);
+        
         // Buscar detalhes do evento
         const { data: evento } = await supabase
           .from('eventos')
           .select('id, titulo, data, status')
           .eq('id', lembrete.evento_id)
           .maybeSingle();
+        
+        console.log('[DEBUG] Evento associado:', evento ? { titulo: evento.titulo, status: evento.status } : 'NÃO ENCONTRADO');
         
         if (evento) {
           console.log(`📌 Mensagem citada é lembrete do evento: ${evento.titulo}`);
@@ -632,8 +657,19 @@ INTERPRETAÇÃO CRÍTICA:
       }
     );
 
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - RESPOSTA DA MALU (processar-conversa-malu)
+    // ═══════════════════════════════════════════════════════════
     const maluResponse = await processarResponse.json();
-    console.log('🤖 Resposta Malu:', maluResponse);
+    console.log('\n' + '='.repeat(60));
+    console.log('[DEBUG] 🤖 RESPOSTA MALU RECEBIDA:');
+    console.log('[DEBUG]   └─ ação:', maluResponse.acao);
+    console.log('[DEBUG]   └─ busca:', maluResponse.busca || 'N/A');
+    console.log('[DEBUG]   └─ titulo:', maluResponse.titulo || 'N/A');
+    console.log('[DEBUG]   └─ novo_status:', maluResponse.novo_status || 'N/A');
+    console.log('[DEBUG]   └─ resposta_preview:', maluResponse.resposta?.substring(0, 100) || 'N/A');
+    console.log('[DEBUG] 📦 RESPOSTA COMPLETA:', JSON.stringify(maluResponse, null, 2));
+    console.log('='.repeat(60));
 
     let respostaFinal = maluResponse.resposta || 'Olá! Precisa de algo?';
 

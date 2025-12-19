@@ -46,14 +46,42 @@ serve(async (req) => {
   try {
     const { mensagem, imageUrl, contexto } = await req.json();
 
-    // === LOG DE INPUT (DEBUG CRÍTICO) ===
-    console.log('📥 INPUT RECEBIDO:', { 
-      temMensagem: !!mensagem, 
-      mensagem: mensagem?.substring(0, 100),
-      temImageUrl: !!imageUrl,
-      imageUrlPreview: imageUrl?.substring(0, 80),
-      contextoLength: contexto?.length || 0
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - INÍCIO DO PROCESSAMENTO
+    // ═══════════════════════════════════════════════════════════
+    console.log('\n' + '='.repeat(60));
+    console.log('[DEBUG] ⏰ TIMESTAMP:', new Date().toISOString());
+    console.log('[DEBUG] 📥 MENSAGEM RECEBIDA:', {
+      texto: mensagem,
+      tamanho: mensagem?.length || 0
     });
+    console.log('[DEBUG] 🖼️ IMAGEM:', imageUrl ? imageUrl.substring(0, 80) + '...' : 'NENHUMA');
+    
+    // === LOG DETALHADO DO CONTEXTO ===
+    console.log('[DEBUG] 📚 CONTEXTO CARREGADO:', {
+      total_itens: contexto?.length || 0,
+      tem_acao_pendente: contexto?.some((c: any) => c.acao_pendente),
+      tem_mensagem_citada: contexto?.some((c: any) => c.mensagem_citada),
+      itens: contexto?.map((c: any, i: number) => ({
+        indice: i,
+        tipo: c.role || (c.mensagem_citada ? 'mensagem_citada' : c.acao_pendente ? 'acao_pendente' : 'conversa'),
+        preview: c.content?.substring(0, 80) || c.usuario?.substring(0, 50) || c.evento_titulo || JSON.stringify(c).substring(0, 80)
+      }))
+    });
+    
+    // Se tem ação pendente, log detalhado
+    const acoesPendentes = contexto?.filter((c: any) => c.acao_pendente);
+    if (acoesPendentes?.length > 0) {
+      console.log('[DEBUG] 🔄 AÇÕES PENDENTES ENCONTRADAS:', JSON.stringify(acoesPendentes, null, 2));
+    }
+    
+    // Se tem mensagem citada, log detalhado
+    const msgsCitadas = contexto?.filter((c: any) => c.mensagem_citada || c.role === 'system');
+    if (msgsCitadas?.length > 0) {
+      console.log('[DEBUG] ↩️ MENSAGENS CITADAS/SISTEMA:', JSON.stringify(msgsCitadas, null, 2));
+    }
+    
+    console.log('='.repeat(60));
 
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     if (!ANTHROPIC_API_KEY) {
@@ -771,8 +799,13 @@ ${contextoFormatado}`;
       throw new Error('Sem resposta de texto do Claude');
     }
 
-    // === LOG DA RESPOSTA BRUTA DO CLAUDE ===
-    console.log('🤖 RESPOSTA BRUTA CLAUDE:', textContent.text);
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - RESPOSTA DO CLAUDE
+    // ═══════════════════════════════════════════════════════════
+    console.log('\n' + '='.repeat(60));
+    console.log('[DEBUG] 🤖 RESPOSTA BRUTA CLAUDE:');
+    console.log(textContent.text);
+    console.log('='.repeat(60));
 
     let maluResponse: MaluResponse;
     try {
@@ -780,12 +813,28 @@ ${contextoFormatado}`;
       const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         maluResponse = JSON.parse(jsonMatch[0]);
-        console.log('📝 JSON PARSEADO:', JSON.stringify(maluResponse, null, 2));
+        
+        // === LOG DETALHADO DA AÇÃO DETECTADA ===
+        console.log('[DEBUG] ✅ JSON PARSEADO COM SUCESSO:');
+        console.log('[DEBUG]   └─ ação:', maluResponse.acao);
+        console.log('[DEBUG]   └─ busca:', maluResponse.busca || 'N/A');
+        console.log('[DEBUG]   └─ titulo:', maluResponse.titulo || 'N/A');
+        console.log('[DEBUG]   └─ novo_status:', maluResponse.novo_status || 'N/A');
+        console.log('[DEBUG]   └─ resposta_preview:', maluResponse.resposta?.substring(0, 100) || 'N/A');
+        
+        if (maluResponse.acao === 'marcar_status') {
+          console.log('[DEBUG] 🎯 AÇÃO MARCAR_STATUS DETECTADA!');
+          console.log('[DEBUG]   └─ busca:', maluResponse.busca);
+          console.log('[DEBUG]   └─ novo_status:', maluResponse.novo_status);
+        }
+        
       } else {
+        console.log('[DEBUG] ❌ JSON NÃO ENCONTRADO NA RESPOSTA');
         throw new Error('JSON não encontrado');
       }
     } catch (parseError) {
-      console.log('❌ Erro ao parsear JSON:', textContent.text);
+      console.log('[DEBUG] ❌ ERRO AO PARSEAR JSON:', parseError);
+      console.log('[DEBUG] Texto original:', textContent.text);
       maluResponse = {
         acao: 'conversar',
         resposta: 'Não entendi. Pode reformular?'
@@ -798,7 +847,8 @@ ${contextoFormatado}`;
       maluResponse.resposta = maluResponse.resposta.substring(0, maxLength - 3) + '...';
     }
 
-    console.log('✅ Resposta FINAL da Malu:', maluResponse);
+    console.log('[DEBUG] 📤 RESPOSTA FINAL:', JSON.stringify(maluResponse, null, 2));
+    console.log('='.repeat(60) + '\n');
 
     return new Response(
       JSON.stringify(maluResponse),
