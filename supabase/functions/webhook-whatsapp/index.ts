@@ -332,9 +332,10 @@ serve(async (req) => {
     console.log(`💬 Mensagem de ${phone} (user: ${userId}): ${message}${imageUrl ? ' [+imagem]' : ''}`);
 
     // 1. Buscar contexto das últimas 10 conversas (aumentado para melhor interpretação)
+    // INCLUIR coluna 'contexto' para recuperar ações pendentes (editar, cancelar, etc.)
     const { data: ultimasConversas } = await supabase
       .from('conversas')
-      .select('mensagem_usuario, mensagem_malu')
+      .select('mensagem_usuario, mensagem_malu, contexto')
       .eq('whatsapp_de', phone)
       .order('criada_em', { ascending: false })
       .limit(10);
@@ -343,6 +344,33 @@ serve(async (req) => {
       usuario: c.mensagem_usuario,
       malu: c.mensagem_malu
     })) || [];
+
+    // ═══════════════════════════════════════════════════════════
+    // RECUPERAR AÇÃO PENDENTE DA ÚLTIMA CONVERSA (FIX BUG EDIÇÃO)
+    // ═══════════════════════════════════════════════════════════
+    if (ultimasConversas && ultimasConversas.length > 0) {
+      // Pegar a última conversa (que agora está na posição 0 após reverse? não, antes do reverse)
+      // ultimasConversas está ordenado DESC, então [0] é a mais recente
+      const ultimaConversa = ultimasConversas[0];
+      
+      if (ultimaConversa.contexto && Array.isArray(ultimaConversa.contexto)) {
+        // Buscar ação pendente na última conversa
+        const acaoPendente = ultimaConversa.contexto.find((c: any) => 
+          c.acao_pendente === 'editar' || 
+          c.acao_pendente === 'cancelar' ||
+          c.acao_pendente === 'confirmar_evento_encontrado' ||
+          c.acao_pendente === 'marcar_status' ||
+          c.acao_pendente === 'escolher_editar' ||
+          c.acao_pendente === 'escolher_cancelar'
+        );
+        
+        if (acaoPendente) {
+          console.log('🔄 Ação pendente recuperada do banco:', JSON.stringify(acaoPendente));
+          // Adicionar ao contexto atual para processamento
+          contexto.push(acaoPendente);
+        }
+      }
+    }
 
     console.log('📚 Contexto carregado:', contexto.length, 'mensagens');
 
@@ -1024,16 +1052,25 @@ Relaxa, eu cuido! 😊`;
             dataAtual.setFullYear(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
           }
           
-          // Aplicar nova hora
+          // Aplicar nova hora (mantendo a data)
+          // CRÍTICO: Usar timezone de Brasília (-03:00) para salvar corretamente
           if (acaoPendente.nova_hora) {
             const [hora, minuto] = acaoPendente.nova_hora.split(':');
             dataAtual.setHours(parseInt(hora), parseInt(minuto), 0, 0);
           }
           
+          // Formatar com timezone de Brasília
+          const ano = dataAtual.getFullYear();
+          const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
+          const dia = String(dataAtual.getDate()).padStart(2, '0');
+          const hora = String(dataAtual.getHours()).padStart(2, '0');
+          const min = String(dataAtual.getMinutes()).padStart(2, '0');
+          const dataFinalBRT = `${ano}-${mes}-${dia}T${hora}:${min}:00-03:00`;
+          
           // Atualizar
           const { error: updateError } = await supabase
             .from('eventos')
-            .update({ data: dataAtual.toISOString() })
+            .update({ data: dataFinalBRT })
             .eq('id', acaoPendente.evento_id);
           
           if (updateError) {

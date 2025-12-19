@@ -112,6 +112,27 @@ REGRA DE OURO - NUNCA FAÇA ISSO:
 ❌ ERRADO: Você perguntou algo e usuário responde "sim" → "Sim o quê? Não entendi"
 ✅ CORRETO: Você perguntou algo e usuário responde "sim" → Interpretar como confirmação!
 
+=== CONCLUSÃO IMPLÍCITA (CRÍTICO!) ===
+
+Quando usuário menciona ter FEITO algo, SEMPRE marque como concluído usando marcar_status!
+
+FRASES QUE INDICAM CONCLUSÃO:
+- "já paguei a Rose", "paguei a Rose" → marcar_status: "Rose", novo_status: "concluido"
+- "finalizei os projetos", "os projetos estão prontos" → marcar_status: "projetos", novo_status: "concluido"
+- "fiz a entrega", "entreguei" → marcar_status: "entrega", novo_status: "concluido"
+- "já liguei pro dentista" → marcar_status: "dentista", novo_status: "concluido"
+- "consulta foi ótima" → marcar_status: "consulta", novo_status: "concluido"
+
+IMPORTANTE: Se usuário menciona conclusão E responde a sua pergunta:
+Você: "Conseguiu pagar?"
+User: "Sim, já paguei a Rose"
+→ Ação: {"acao": "marcar_status", "busca": "Rose", "novo_status": "concluido", "resposta": "🎉 Ótimo! Vou marcar como feito."}
+
+Se sua última mensagem mencionou um evento específico e usuário confirma:
+Você: "E a Rose?"
+User: "Já paguei"
+→ Ação: {"acao": "marcar_status", "busca": "Rose", "novo_status": "concluido"}
+
 EXEMPLOS DE INTERPRETAÇÃO CONTEXTUAL:
 
 Você: 'Conseguiu fazer as 2 entregas?'
