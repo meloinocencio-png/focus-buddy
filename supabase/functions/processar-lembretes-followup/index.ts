@@ -49,12 +49,13 @@ serve(async (req) => {
     
     const agora = new Date();
     
-    // Buscar lembretes que precisam de follow-up (inclui data do evento)
+    // Buscar lembretes que precisam de follow-up (inclui data e STATUS do evento)
+    // CRÍTICO: Incluir status para filtrar eventos já concluídos
     const { data: followups, error: fetchError } = await supabase
       .from('lembretes_followup')
       .select(`
         *,
-        eventos!inner(id, titulo, tipo, data, criado_em)
+        eventos!inner(id, titulo, tipo, data, criado_em, status)
       `)
       .eq('ativo', true)
       .eq('concluido', false)
@@ -98,6 +99,22 @@ serve(async (req) => {
     for (const followup of followups) {
       try {
         const evento = followup.eventos as any;
+        
+        // ═══════════════════════════════════════════════════════════
+        // FILTRAR: Não enviar follow-up para eventos já CONCLUÍDOS
+        // ═══════════════════════════════════════════════════════════
+        if (evento.status === 'concluido') {
+          console.log(`⏭️ Pulando follow-up (evento já concluído): ${evento.titulo}`);
+          
+          // Marcar follow-up como concluído também
+          await supabase
+            .from('lembretes_followup')
+            .update({ concluido: true, ativo: false })
+            .eq('id', followup.id);
+          
+          continue;
+        }
+        
         const dataEvento = new Date(evento.data);
         
         // Gerar mensagem variada usando função helper
