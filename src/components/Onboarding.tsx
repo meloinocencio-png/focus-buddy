@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { toBrasiliaTimestamp } from "@/utils/dateUtils";
 import { toast } from "sonner";
 
 interface OnboardingProps {
@@ -117,7 +118,8 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
       if (!user) throw new Error('Usuário não autenticado');
       
       // Data = agora + 1 hora (evita poluir agenda com "AGORA")
-      const defaultDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      // IMPORTANTE: salvar com timezone de Brasília (-03:00), não em UTC (toISOString)
+      const defaultDate = toBrasiliaTimestamp(new Date(Date.now() + 60 * 60 * 1000));
       const tituloTrimmed = inputValue.trim();
       
       // Criar evento simples (direto no DB, sem Claude)

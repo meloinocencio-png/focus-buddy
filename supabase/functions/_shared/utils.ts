@@ -109,12 +109,47 @@ export function criarTimestampBrasilia(data: Date, hora: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FUNÇÃO: Obter início do dia atual (00:00:00)
+// FUNÇÕES: Helpers de Brasília (timezone fixo do produto)
+// ═══════════════════════════════════════════════════════════
+export function getDataYYYYMMDD_Brasilia(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '00';
+  const day = parts.find((p) => p.type === 'day')?.value ?? '00';
+
+  return `${year}-${month}-${day}`;
+}
+
+export function formatarTimestampBrasilia(date: Date): string {
+  const data = getDataYYYYMMDD_Brasilia(date);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  const second = parts.find((p) => p.type === 'second')?.value ?? '00';
+
+  // Observação: Brasil não tem DST hoje; manter offset fixo evita o "vai e volta".
+  return `${data}T${hour}:${minute}:${second}-03:00`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Obter início do dia atual em Brasília (00:00:00)
 // ═══════════════════════════════════════════════════════════
 export function getInicioHoje(): Date {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  return hoje;
+  const hojeStr = getDataYYYYMMDD_Brasilia(new Date());
+  return new Date(`${hojeStr}T00:00:00-03:00`);
 }
 
 // ═══════════════════════════════════════════════════════════

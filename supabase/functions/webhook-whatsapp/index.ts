@@ -2,12 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Importar utilitários compartilhados
-import { 
-  corsHeaders, 
-  getUserIdFromWhatsApp, 
-  calcularProximoIntervalo, 
+import {
+  corsHeaders,
+  getUserIdFromWhatsApp,
+  calcularProximoIntervalo,
   formatarIntervalo,
-  criarTimestampBrasilia
+  criarTimestampBrasilia,
+  formatarTimestampBrasilia,
+  formatarHoraBRT
 } from "../_shared/utils.ts";
 import { buscarEventos } from "../_shared/eventos.ts";
 import { processarRecorrencia, gerarOcorrencias } from "../_shared/recorrencia.ts";
@@ -1145,8 +1147,12 @@ Relaxa, eu cuido! 😊`;
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
         eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
           const d = new Date(evt.data);
-          const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-          const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+          const df = new Intl.DateTimeFormat('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit',
+            month: '2-digit'
+          }).format(d);
+          const hf = formatarHoraBRT(d);
           respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
         });
         respostaFinal += `\nQual editar? (número)`;
@@ -1251,39 +1257,47 @@ Relaxa, eu cuido! 😊`;
       } else if (eventosEncontrados.length === 1) {
         const evento = eventosEncontrados[0];
         const d = new Date(evento.data);
-        const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-        const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
-        
+        const df = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          day: '2-digit',
+          month: '2-digit'
+        }).format(d);
+        const hf = formatarHoraBRT(d);
+
         if (foiBuscaFlexivel) {
           // 🔍 PERGUNTAR se é o evento certo
           respostaFinal = `🔍 Você quis dizer *${evento.titulo}* (${df} às ${hf})?`;
-          
+
           contexto.push({
             acao_pendente: 'confirmar_evento_encontrado',
             proxima_acao: 'cancelar',
             evento_id: evento.id
           });
-          
+
         } else {
           // Busca exata - mostrar confirmação de cancelamento direto
           respostaFinal = `📋 Encontrei:\n• ${evento.titulo}\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
-          
+
           contexto.push({
             acao_pendente: 'cancelar',
             evento_id: evento.id
           });
         }
-        
+
       } else {
         respostaFinal = `📋 Encontrei ${eventosEncontrados.length} eventos:\n\n`;
         eventosEncontrados.slice(0, 5).forEach((evt: any, idx: number) => {
           const d = new Date(evt.data);
-          const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-          const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+          const df = new Intl.DateTimeFormat('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit',
+            month: '2-digit'
+          }).format(d);
+          const hf = formatarHoraBRT(d);
           respostaFinal += `${idx + 1}. ${evt.titulo} - ${df} às ${hf}\n`;
         });
         respostaFinal += `\nQual cancelar? (número)`;
-        
+
         contexto.push({
           acao_pendente: 'escolher_cancelar',
           eventos: eventosEncontrados.slice(0, 5).map((e: any) => e.id)
@@ -1479,13 +1493,14 @@ Relaxa, eu cuido! 😊`;
           
           eventos.slice(0, 5).forEach((evt: any, idx: number) => {
             const d = new Date(evt.data);
-            const dia = d.getDate().toString().padStart(2, '0');
-            const mes = (d.getMonth() + 1).toString().padStart(2, '0');
-            const hora = d.getHours();
-            const min = d.getMinutes();
-            const horaStr = `${hora}h${min > 0 ? min.toString().padStart(2, '0') : ''}`;
-            
-            respostaFinal += `${idx + 1}. ${evt.titulo} — ${dia}/${mes} às ${horaStr}\n`;
+            const df = new Intl.DateTimeFormat('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit',
+              month: '2-digit'
+            }).format(d);
+            const horaStr = formatarHoraBRT(d);
+
+            respostaFinal += `${idx + 1}. ${evt.titulo} — ${df} às ${horaStr}\n`;
           });
           
           if (eventos.length > 5) {
@@ -1933,7 +1948,7 @@ Relaxa, eu cuido! 😊`;
             usuario_id: userId,
             tipo: 'lembrete',
             titulo: maluResponse.titulo,
-            data: dataLembrete.toISOString(),
+            data: formatarTimestampBrasilia(dataLembrete),
             status: 'pendente',
             eh_recorrente: false
           }])
