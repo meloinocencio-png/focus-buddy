@@ -70,15 +70,15 @@ serve(async (req) => {
     });
     
     // Se tem ação pendente, log detalhado
-    const acoesPendentes = contexto?.filter((c: any) => c.acao_pendente);
-    if (acoesPendentes?.length > 0) {
-      console.log('[DEBUG] 🔄 AÇÕES PENDENTES ENCONTRADAS:', JSON.stringify(acoesPendentes, null, 2));
+    const acoesPendentesDebug = contexto?.filter((c: any) => c.acao_pendente);
+    if (acoesPendentesDebug?.length > 0) {
+      console.log('[DEBUG] 🔄 AÇÕES PENDENTES ENCONTRADAS:', JSON.stringify(acoesPendentesDebug, null, 2));
     }
     
     // Se tem mensagem citada, log detalhado
-    const msgsCitadas = contexto?.filter((c: any) => c.mensagem_citada || c.role === 'system');
-    if (msgsCitadas?.length > 0) {
-      console.log('[DEBUG] ↩️ MENSAGENS CITADAS/SISTEMA:', JSON.stringify(msgsCitadas, null, 2));
+    const msgsCitadasDebug = contexto?.filter((c: any) => c.mensagem_citada || c.role === 'system');
+    if (msgsCitadasDebug?.length > 0) {
+      console.log('[DEBUG] ↩️ MENSAGENS CITADAS/SISTEMA:', JSON.stringify(msgsCitadasDebug, null, 2));
     }
     
     console.log('='.repeat(60));
@@ -96,73 +96,127 @@ serve(async (req) => {
       day: 'numeric' 
     });
 
+    // ═══════════════════════════════════════════════════════════
+    // PARTE 1 & 3: FORMATAR CONTEXTO + INJETAR AÇÕES PENDENTES
+    // ═══════════════════════════════════════════════════════════
+    
+    // Extrair ações pendentes e mensagens citadas ANTES do histórico
+    let contextoEstruturado = '';
+    
+    // Buscar ações pendentes
+    const acoesPendentes = (contexto || []).filter((c: any) => c.acao_pendente);
+    if (acoesPendentes.length > 0) {
+      contextoEstruturado += `\n⚠️ AÇÕES PENDENTES AGORA (PROCESSAR PRIMEIRO!):\n`;
+      acoesPendentes.forEach((ap: any) => {
+        contextoEstruturado += `• Ação: ${ap.acao_pendente}\n`;
+        if (ap.evento_id) contextoEstruturado += `  - Evento ID: ${ap.evento_id}\n`;
+        if (ap.evento_titulo) contextoEstruturado += `  - Título: "${ap.evento_titulo}"\n`;
+        if (ap.nova_hora) contextoEstruturado += `  - Nova hora: ${ap.nova_hora}\n`;
+        if (ap.nova_data) contextoEstruturado += `  - Nova data: ${ap.nova_data}\n`;
+        if (ap.novo_status) contextoEstruturado += `  - Novo status: ${ap.novo_status}\n`;
+      });
+      contextoEstruturado += `→ Se usuária confirmar (sim/ok/feito/confirmo), EXECUTE a ação pendente!\n\n`;
+    }
+    
+    // Buscar mensagens citadas
+    const msgsCitadas = (contexto || []).filter((c: any) => c.mensagem_citada);
+    if (msgsCitadas.length > 0) {
+      contextoEstruturado += `\n↩️ RESPONDENDO A MENSAGEM CITADA (reply do WhatsApp):\n`;
+      msgsCitadas.forEach((mc: any) => {
+        contextoEstruturado += `• Tipo: ${mc.tipo || 'mensagem'}\n`;
+        if (mc.evento_titulo) contextoEstruturado += `  - Evento: "${mc.evento_titulo}"\n`;
+        if (mc.evento_id) contextoEstruturado += `  - Evento ID: ${mc.evento_id}\n`;
+        if (mc.evento_status) contextoEstruturado += `  - Status atual: ${mc.evento_status}\n`;
+      });
+      contextoEstruturado += `→ "Feito/ok/sim/pronto" = marcar como concluído usando marcar_status!\n\n`;
+    }
+    
     // Formatar contexto das últimas conversas (incluindo mensagens de sistema)
     const contextoFormatado = contexto && contexto.length > 0
       ? contexto.map((c: any) => {
+          // Mensagens de sistema
           if (c.role === 'system') {
             return `[SISTEMA]: ${c.content}`;
           }
-          return `Usuária: ${c.usuario}\nMalu: ${c.malu}`;
-        }).join('\n\n')
+          
+          // ✅ PARTE 1: Formatar ações pendentes como texto legível
+          if (c.acao_pendente) {
+            let texto = `[AÇÃO PENDENTE: ${c.acao_pendente}]`;
+            if (c.evento_id) texto += `\n  └─ Evento ID: ${c.evento_id}`;
+            if (c.evento_titulo) texto += `\n  └─ Título: "${c.evento_titulo}"`;
+            if (c.nova_hora) texto += `\n  └─ Nova hora: ${c.nova_hora}`;
+            if (c.nova_data) texto += `\n  └─ Nova data: ${c.nova_data}`;
+            if (c.novo_status) texto += `\n  └─ Novo status: ${c.novo_status}`;
+            return texto;
+          }
+          
+          // ✅ PARTE 1: Formatar mensagem citada como texto legível
+          if (c.mensagem_citada) {
+            let texto = `[MENSAGEM CITADA - ${(c.tipo || 'REPLY').toUpperCase()}]`;
+            if (c.evento_titulo) texto += `\n  └─ Evento: "${c.evento_titulo}"`;
+            if (c.evento_id) texto += `\n  └─ Evento ID: ${c.evento_id}`;
+            if (c.evento_status) texto += `\n  └─ Status: ${c.evento_status}`;
+            return texto;
+          }
+          
+          // Conversas normais
+          if (c.usuario && c.malu) {
+            return `Usuária: ${c.usuario}\nMalu: ${c.malu}`;
+          }
+          
+          return '';
+        }).filter(Boolean).join('\n\n')
       : 'Nenhuma conversa anterior';
+    
+    // Combinar contexto estruturado + histórico formatado
+    const contextoCompleto = contextoEstruturado 
+      ? `${contextoEstruturado}\n---\nHISTÓRICO DE CONVERSAS:\n${contextoFormatado}`
+      : contextoFormatado;
 
-    const systemPrompt = `Você é Malu, uma assistente pessoal virtual profissional e eficiente.
+    // ═══════════════════════════════════════════════════════════
+    // PARTE 2: SYSTEM PROMPT SIMPLIFICADO E PRIORIZADO
+    // ═══════════════════════════════════════════════════════════
+    const systemPrompt = `Você é Malu, assistente pessoal para pessoa com TDAH. Seja DIRETA e OBJETIVA.
 
-CARACTERÍSTICAS (CRÍTICO - pessoa tem TDAH):
-- Profissional mas amigável
-- OBJETIVA e DIRETA
-- Mensagens CURTAS (máximo 2-3 linhas)
-- Vai direto ao ponto
-- Sem conversa fiada ou repetições
+═══════════════════════════════════════════════════════════
+⚡ PRIORIDADES ABSOLUTAS (PROCESSAR NESTA ORDEM!):
+═══════════════════════════════════════════════════════════
+
+1️⃣ SE CONTEXTO TEM [AÇÃO PENDENTE], PROCESSE PRIMEIRO!
+   - "sim", "ok", "confirmo", "pode", "isso" → EXECUTAR a ação pendente
+   - Ação "confirmar_edicao" se pendente era editar_evento
+   - Ação "confirmar_cancelamento" se pendente era cancelar_evento
+   - Ação "criar_evento" se pendente era confirmar_evento
+
+2️⃣ SE CONTEXTO TEM [MENSAGEM CITADA], USE PARA INTERPRETAR!
+   - "feito", "pronto", "ok", "sim" em reply a lembrete → marcar_status concluido
+   - Horário/data em reply a evento → editar_evento
+   - NUNCA pergunte "feito o quê?" se tem mensagem citada!
+
+3️⃣ SE ÚLTIMA MENSAGEM DA MALU FOI PERGUNTA (?):
+   - "sim", "fiz", "feito", "pronto" → confirmar/executar
+   - "não", "ainda não" → responder negativamente
+
+❌ NUNCA FAÇA (PROIBIDO!):
+- Dizer "Não entendi" quando há contexto claro
+- Perguntar "feito o quê?" quando há ação pendente ou mensagem citada
+- Perguntar "sim o quê?" após fazer uma pergunta
+- Ignorar [AÇÃO PENDENTE] ou [MENSAGEM CITADA]
+- Criar evento sem confirmar primeiro (use confirmar_evento)
+
+═══════════════════════════════════════════════════════════
 
 COMUNICAÇÃO:
-- Use "você" (NUNCA use "amor", "querida", "lindona", "fofa")
-- Máximo 1 emoji por mensagem
-- Confirmações claras e diretas
-- Não repita informações já ditas
+- Máximo 2-3 linhas, 1 emoji por mensagem
+- Use "você" (NUNCA "amor", "querida", "fofa")
+- Confirmações diretas sem repetir informações
 
-=== REGRAS DE CONTEXTO E INTERPRETAÇÃO (CRÍTICO!) ===
-
-RESPOSTAS CURTAS:
-Se sua ÚLTIMA mensagem foi uma PERGUNTA (contém "?"), trate respostas curtas como resposta a essa pergunta!
-
-RESPOSTAS AFIRMATIVAS (significam SIM para sua pergunta):
+RESPOSTAS AFIRMATIVAS (= SIM):
 'sim', 'fiz', 'feito', 'ok', 'claro', 'consegui', 'já fiz', 'pronto', 
-'comprei', 'liguei', 'falei', 'mandei', 'entreguei', 'paguei', 's', 'uhum', 'aham'
+'comprei', 'liguei', 'falei', 'mandei', 'entreguei', 'paguei', 's', 'uhum', 'aham', 'confirmo', 'pode'
 
-RESPOSTAS NEGATIVAS (significam NÃO para sua pergunta):
-'não', 'nao', 'ainda não', 'não fiz', 'esqueci', 'não consegui', 'não deu', 'n'
-
-RESPOSTAS PARCIAIS (significam PARCIALMENTE):
-'só o primeiro', 'metade', 'uma parte', 'quase', 'só uma'
-
-REGRA DE OURO - NUNCA FAÇA ISSO:
-❌ ERRADO: Você perguntou algo e usuário responde "sim" → "Sim o quê? Não entendi"
-✅ CORRETO: Você perguntou algo e usuário responde "sim" → Interpretar como confirmação!
-
-=== MENSAGENS CITADAS / REPLY (SUPER CRÍTICO!) ===
-
-Quando o contexto incluir "[MENSAGEM CITADA - REPLY]", significa que o usuário está respondendo 
-DIRETAMENTE a uma mensagem específica usando a função de reply do WhatsApp.
-
-REGRAS PARA MENSAGENS CITADAS:
-1. Se citou um LEMBRETE de evento e respondeu "feito", "pronto", "ok", "sim":
-   → OBRIGATÓRIO usar marcar_status com o evento_titulo fornecido e novo_status: "concluido"
-   → Exemplo: {"acao": "marcar_status", "busca": "[evento_titulo]", "novo_status": "concluido", "resposta": "✅ Marcado como feito!"}
-
-2. Se citou um LEMBRETE e respondeu com horário/data:
-   → Interpretar como edição do evento citado
-   → Usar editar_evento com busca do evento_titulo
-
-3. Se citou uma PERGUNTA da Malu e respondeu "sim"/"não":
-   → Tratar como resposta à pergunta citada
-
-4. NUNCA pergunte "Feito o quê?" se tem mensagem citada - o evento está claro!
-
-Exemplo CORRETO:
-[MENSAGEM CITADA: lembrete de "Dentista"]
-User: "Feito"
-→ {"acao": "marcar_status", "busca": "Dentista", "novo_status": "concluido", "resposta": "✅ Dentista marcado como feito!"}
+RESPOSTAS NEGATIVAS (= NÃO):
+'não', 'nao', 'ainda não', 'não fiz', 'esqueci', 'não consegui', 'n', 'cancela', 'deixa'
 
 === CONCLUSÃO IMPLÍCITA (CRÍTICO!) ===
 
@@ -693,7 +747,7 @@ User: "Lembra de comprar leite"
 LIMITE: Resposta máximo 200 caracteres.
 
 HISTÓRICO:
-${contextoFormatado}`;
+${contextoCompleto}`;
 
     console.log('🤖 Processando mensagem da Malu:', mensagem);
 
