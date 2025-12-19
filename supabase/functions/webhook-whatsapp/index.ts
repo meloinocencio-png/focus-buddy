@@ -1163,6 +1163,13 @@ Relaxa, eu cuido! 😊`;
     // HANDLER: CONFIRMAR EDIÇÃO
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'confirmar_edicao') {
+      // ═══════════════════════════════════════════════════════════
+      // DEBUG DETALHADO - CONFIRMAR EDIÇÃO
+      // ═══════════════════════════════════════════════════════════
+      console.log('\n' + '='.repeat(60));
+      console.log('[DEBUG] ✏️ HANDLER: CONFIRMAR_EDICAO');
+      console.log('[DEBUG] Contexto completo:', JSON.stringify(contexto, null, 2));
+      
       // Aceitar ambos os tipos de contexto:
       // 1. Edição direta após busca exata (acao_pendente: 'editar')
       // 2. Confirmação após busca flexível (confirmar_evento_encontrado + proxima_acao: 'editar')
@@ -1170,6 +1177,9 @@ Relaxa, eu cuido! 😊`;
         c.acao_pendente === 'editar' || 
         (c.acao_pendente === 'confirmar_evento_encontrado' && c.proxima_acao === 'editar')
       );
+      
+      console.log('[DEBUG] Ação pendente encontrada:', acaoPendente ? JSON.stringify(acaoPendente) : 'NENHUMA');
+      console.log('='.repeat(60));
       
       if (!acaoPendente) {
         respostaFinal = '❌ Não há edição pendente.';
@@ -1588,9 +1598,23 @@ Relaxa, eu cuido! 😊`;
     // HANDLER: MARCAR STATUS DE EVENTO
     // ═══════════════════════════════════════════════════════════
     else if (maluResponse.acao === 'marcar_status') {
+      // ═══════════════════════════════════════════════════════════
+      // DEBUG DETALHADO - MARCAR STATUS
+      // ═══════════════════════════════════════════════════════════
+      console.log('\n' + '='.repeat(60));
+      console.log('[DEBUG] ✅ HANDLER: MARCAR_STATUS');
+      console.log('[DEBUG] Parâmetros recebidos:', {
+        busca: maluResponse.busca,
+        novo_status: maluResponse.novo_status,
+        titulo: maluResponse.titulo || 'N/A'
+      });
+      console.log('[DEBUG] Contexto atual:', JSON.stringify(contexto.filter((c: any) => c.mensagem_citada || c.acao_pendente), null, 2));
+      console.log('='.repeat(60));
+      
       console.log('✅ Marcando status:', maluResponse.busca, '→', maluResponse.novo_status);
       
       if (!maluResponse.busca || !maluResponse.novo_status) {
+        console.log('[DEBUG] ❌ Parâmetros faltando! busca:', maluResponse.busca, 'novo_status:', maluResponse.novo_status);
         respostaFinal = '❌ Especifique o evento para marcar.';
       } else {
         // Buscar eventos de hoje ou até 7 dias atrás (eventos recentes)
