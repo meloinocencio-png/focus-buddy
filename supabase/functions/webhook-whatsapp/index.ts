@@ -9,7 +9,9 @@ import {
   formatarIntervalo,
   criarTimestampBrasilia,
   formatarTimestampBrasilia,
-  formatarHoraBRT
+  formatarHoraBRT,
+  extrairPartesBrasilia,
+  formatarDataHoraCurta
 } from "../_shared/utils.ts";
 import { buscarEventos } from "../_shared/eventos.ts";
 import { processarRecorrencia, gerarOcorrencias } from "../_shared/recorrencia.ts";
@@ -519,14 +521,30 @@ serve(async (req) => {
           
           if (evento) {
             const d = new Date(evento.data);
-            const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-            const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+            
+            // ✅ CORRIGIDO: Usar Intl.DateTimeFormat com timezone Brasília
+            const parts = new Intl.DateTimeFormat('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }).formatToParts(d);
+            
+            const dia = parts.find(p => p.type === 'day')?.value || '01';
+            const mes = parts.find(p => p.type === 'month')?.value || '01';
+            const hora = parts.find(p => p.type === 'hour')?.value || '00';
+            const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+            
+            const df = `${dia}/${mes}`;
+            const hf = `${hora}h${minuto !== '00' ? minuto : ''}`;
             
             let respostaFinal = `📋 *${eventoSelecionado.titulo}*\n• ${df} às ${hf}\n\n✏️ Mudar para:\n`;
             
             if (acaoPendenteEditar.nova_data) {
-              const nd = new Date(acaoPendenteEditar.nova_data);
-              respostaFinal += `• Data: ${nd.getDate().toString().padStart(2, '0')}/${(nd.getMonth() + 1).toString().padStart(2, '0')}\n`;
+              const [anoNd, mesNd, diaNd] = acaoPendenteEditar.nova_data.split('-');
+              respostaFinal += `• Data: ${diaNd}/${mesNd}\n`;
             }
             if (acaoPendenteEditar.nova_hora) {
               const [h, m] = acaoPendenteEditar.nova_hora.split(':');
@@ -592,8 +610,24 @@ serve(async (req) => {
           
           if (evento) {
             const d = new Date(evento.data);
-            const df = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-            const hf = `${d.getHours()}h${d.getMinutes() > 0 ? d.getMinutes().toString().padStart(2, '0') : ''}`;
+            
+            // ✅ CORRIGIDO: Usar Intl.DateTimeFormat com timezone Brasília
+            const partsCancelar = new Intl.DateTimeFormat('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }).formatToParts(d);
+            
+            const diaC = partsCancelar.find(p => p.type === 'day')?.value || '01';
+            const mesC = partsCancelar.find(p => p.type === 'month')?.value || '01';
+            const horaC = partsCancelar.find(p => p.type === 'hour')?.value || '00';
+            const minutoC = partsCancelar.find(p => p.type === 'minute')?.value || '00';
+            
+            const df = `${diaC}/${mesC}`;
+            const hf = `${horaC}h${minutoC !== '00' ? minutoC : ''}`;
             
             const respostaFinal = `📋 *${eventoSelecionado.titulo}*\n• ${df} às ${hf}\n\n❌ Confirma cancelamento?`;
             
@@ -1424,26 +1458,42 @@ Relaxa, eu cuido! 😊`;
         } else {
           const dataAtual = new Date(eventoAtual.data);
           
-          // Aplicar nova data
+          // ✅ CORRIGIDO: Extrair partes em Brasília ANTES de modificar
+          const partsOriginal = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }).formatToParts(dataAtual);
+          
+          let ano = partsOriginal.find(p => p.type === 'year')?.value || '2025';
+          let mes = partsOriginal.find(p => p.type === 'month')?.value || '01';
+          let dia = partsOriginal.find(p => p.type === 'day')?.value || '01';
+          let hora = partsOriginal.find(p => p.type === 'hour')?.value || '12';
+          let minuto = partsOriginal.find(p => p.type === 'minute')?.value || '00';
+          
+          // Aplicar nova data (se houver)
           if (acaoPendente.nova_data) {
-            const [ano, mes, dia] = acaoPendente.nova_data.split('-');
-            dataAtual.setFullYear(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+            [ano, mes, dia] = acaoPendente.nova_data.split('-');
           }
           
-          // Aplicar nova hora (mantendo a data)
-          // CRÍTICO: Usar timezone de Brasília (-03:00) para salvar corretamente
+          // Aplicar nova hora (se houver)
           if (acaoPendente.nova_hora) {
-            const [hora, minuto] = acaoPendente.nova_hora.split(':');
-            dataAtual.setHours(parseInt(hora), parseInt(minuto), 0, 0);
+            [hora, minuto] = acaoPendente.nova_hora.split(':');
           }
           
-          // Formatar com timezone de Brasília
-          const ano = dataAtual.getFullYear();
-          const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
-          const dia = String(dataAtual.getDate()).padStart(2, '0');
-          const hora = String(dataAtual.getHours()).padStart(2, '0');
-          const min = String(dataAtual.getMinutes()).padStart(2, '0');
-          const dataFinalBRT = `${ano}-${mes}-${dia}T${hora}:${min}:00-03:00`;
+          // Construir timestamp final em Brasília
+          const dataFinalBRT = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
+          
+          console.log('[DEBUG] 🕐 Timezone corrigido:', {
+            original: eventoAtual.data,
+            nova_data: acaoPendente.nova_data,
+            nova_hora: acaoPendente.nova_hora,
+            timestamp_final: dataFinalBRT
+          });
           
           // Atualizar
           const { error: updateError } = await supabase

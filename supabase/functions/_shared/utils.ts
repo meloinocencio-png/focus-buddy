@@ -84,28 +84,93 @@ export async function getUserIdFromWhatsApp(supabase: any, phone: string): Promi
 }
 
 // ═══════════════════════════════════════════════════════════
-// FUNÇÃO: Formatar data em formato brasileiro
+// FUNÇÃO: Formatar data em formato brasileiro (COM TIMEZONE)
 // ═══════════════════════════════════════════════════════════
 export function formatarDataBR(data: Date): string {
-  const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const diaSemana = diasSemana[data.getDay()];
-  const dia = data.getDate().toString().padStart(2, '0');
-  const mes = (data.getMonth() + 1).toString().padStart(2, '0');
-  const hora = data.getHours().toString().padStart(2, '0');
-  const minuto = data.getMinutes().toString().padStart(2, '0');
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(data);
   
-  return `${diaSemana} ${dia}/${mes} às ${hora}:${minuto}`;
+  const diaSemana = parts.find(p => p.type === 'weekday')?.value || 'Seg';
+  const dia = parts.find(p => p.type === 'day')?.value || '01';
+  const mes = parts.find(p => p.type === 'month')?.value || '01';
+  const hora = parts.find(p => p.type === 'hour')?.value || '00';
+  const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+  
+  // Capitalizar primeira letra do dia da semana
+  const diaSemanaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1).replace('.', '');
+  
+  return `${diaSemanaCapitalizado} ${dia}/${mes} às ${hora}:${minuto}`;
 }
 
 // ═══════════════════════════════════════════════════════════
 // FUNÇÃO: Criar timestamp com timezone Brasília
 // ═══════════════════════════════════════════════════════════
 export function criarTimestampBrasilia(data: Date, hora: string): string {
-  const ano = data.getFullYear();
-  const mes = String(data.getMonth() + 1).padStart(2, '0');
-  const dia = String(data.getDate()).padStart(2, '0');
-  
-  return `${ano}-${mes}-${dia}T${hora}:00-03:00`;
+  // ✅ CORRIGIDO: Extrair data em Brasília
+  const parts = extrairPartesBrasilia(data);
+  return `${parts.ano}-${parts.mes}-${parts.dia}T${hora}:00-03:00`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Extrair partes de data/hora em timezone de Brasília
+// Usado para evitar bugs ao manipular Date objects em UTC
+// ═══════════════════════════════════════════════════════════
+export function extrairPartesBrasilia(date: Date): { 
+  ano: string, 
+  mes: string, 
+  dia: string, 
+  hora: string, 
+  minuto: string 
+} {
+  const partsData = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+
+  const partsHora = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  return {
+    ano: partsData.find(p => p.type === 'year')?.value || '2025',
+    mes: partsData.find(p => p.type === 'month')?.value || '01',
+    dia: partsData.find(p => p.type === 'day')?.value || '01',
+    hora: partsHora.find(p => p.type === 'hour')?.value || '12',
+    minuto: partsHora.find(p => p.type === 'minute')?.value || '00'
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Formatar data/hora curta em Brasília (DD/MM às HH:mm)
+// ═══════════════════════════════════════════════════════════
+export function formatarDataHoraCurta(date: Date): string {
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const dia = parts.find(p => p.type === 'day')?.value || '01';
+  const mes = parts.find(p => p.type === 'month')?.value || '01';
+  const hora = parts.find(p => p.type === 'hour')?.value || '00';
+  const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+
+  return `${dia}/${mes} às ${hora}:${minuto}`;
 }
 
 // ═══════════════════════════════════════════════════════════
