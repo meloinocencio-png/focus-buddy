@@ -160,14 +160,15 @@ IMPORTANTE: Retorne apenas o JSON, sem markdown, sem \`\`\`json, sem texto extra
       }
     }
 
-    // Construir timestamp com data e hora
+    // Construir timestamp com data e hora (SEMPRE em Brasília -03:00)
+    const BRT_OFFSET = '-03:00';
     let dataTimestamp = eventoData.data;
     if (eventoData.hora) {
-      dataTimestamp = `${eventoData.data}T${eventoData.hora}:00`;
-      console.log('[processar-comando] Timestamp com hora:', dataTimestamp);
+      dataTimestamp = `${eventoData.data}T${eventoData.hora}:00${BRT_OFFSET}`;
+      console.log('[processar-comando] Timestamp com hora (BRT):', dataTimestamp);
     } else {
-      dataTimestamp = `${eventoData.data}T12:00:00`;
-      console.log('[processar-comando] Timestamp sem hora (padrão 12:00):', dataTimestamp);
+      dataTimestamp = `${eventoData.data}T12:00:00${BRT_OFFSET}`;
+      console.log('[processar-comando] Timestamp sem hora (padrão 12:00 BRT):', dataTimestamp);
     }
 
     // Calcular datas dos lembretes baseado na data do evento

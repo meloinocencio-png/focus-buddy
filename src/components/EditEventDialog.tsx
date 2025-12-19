@@ -21,7 +21,12 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { parseUTCDate } from "@/utils/dateUtils";
+import {
+  buildBrasiliaTimestamp,
+  formatDateInputBrasilia,
+  formatTimeInputBrasilia,
+  parseUTCDate,
+} from "@/utils/dateUtils";
 
 interface Evento {
   id: string;
@@ -62,8 +67,10 @@ export const EditEventDialog = ({
   useEffect(() => {
     if (evento) {
       const dataEvento = parseUTCDate(evento.data);
-      const dataFormatada = dataEvento.toISOString().split("T")[0];
-      const horaFormatada = dataEvento.toTimeString().slice(0, 5);
+
+      // IMPORTANTE: não usar toISOString() aqui (vira UTC e pode mudar dia/hora)
+      const dataFormatada = formatDateInputBrasilia(dataEvento);
+      const horaFormatada = formatTimeInputBrasilia(dataEvento);
 
       setFormData({
         tipo: evento.tipo,
@@ -78,9 +85,9 @@ export const EditEventDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!evento) return;
-    
+
     if (!formData.titulo || !formData.data) {
       toast.error("Título e data são obrigatórios");
       return;
@@ -89,7 +96,8 @@ export const EditEventDialog = ({
     setLoading(true);
 
     try {
-      const dataTimestamp = `${formData.data}T${formData.hora || "12:00"}:00`;
+      // SEMPRE salvar com timezone de Brasília (-03:00)
+      const dataTimestamp = buildBrasiliaTimestamp(formData.data, formData.hora || "12:00");
 
       const { error } = await supabase
         .from("eventos")
