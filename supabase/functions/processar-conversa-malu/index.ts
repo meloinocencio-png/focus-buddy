@@ -856,7 +856,19 @@ ${contextoFormatado}`;
     );
 
   } catch (error) {
-    console.error('❌ Erro ao processar conversa:', error);
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - ERRO NO PROCESSAR-CONVERSA-MALU
+    // ═══════════════════════════════════════════════════════════
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    const errorStack = error instanceof Error ? error.stack : 'N/A';
+    
+    console.error('\n' + '!'.repeat(60));
+    console.error('[DEBUG] ❌ ERRO CRÍTICO NO PROCESSAR-CONVERSA-MALU');
+    console.error('[DEBUG] Mensagem:', errorMessage);
+    console.error('[DEBUG] Stack:', errorStack);
+    console.error('[DEBUG] Erro completo:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error('!'.repeat(60) + '\n');
+    
     return new Response(
       JSON.stringify({ 
         acao: 'conversar',

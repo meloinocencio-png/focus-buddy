@@ -2113,8 +2113,18 @@ Relaxa, eu cuido! 😊`;
     );
 
   } catch (error: unknown) {
+    // ═══════════════════════════════════════════════════════════
+    // DEBUG DETALHADO - ERRO PRINCIPAL
+    // ═══════════════════════════════════════════════════════════
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('❌ Erro no webhook:', error);
+    const errorStack = error instanceof Error ? error.stack : 'N/A';
+    
+    console.error('\n' + '!'.repeat(60));
+    console.error('[DEBUG] ❌ ERRO CRÍTICO NO WEBHOOK');
+    console.error('[DEBUG] Mensagem:', errorMessage);
+    console.error('[DEBUG] Stack:', errorStack);
+    console.error('[DEBUG] Erro completo:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error('!'.repeat(60) + '\n');
     
     // Nota: não deletamos o lock em caso de erro para evitar reprocessamento
     // O registro ficará com '[processando]' indicando falha
