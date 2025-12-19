@@ -133,6 +133,16 @@ serve(async (req) => {
     }
     console.log('🆔 Z-API Message ID:', zapiMessageId);
 
+    // === DETECTAR MENSAGEM CITADA (REPLY) - CRÍTICO PARA RESPOSTAS CONTEXTUAIS ===
+    const referenceMessageId = payload.referenceMessageId || 
+      payload.quotedMsgId || 
+      payload.contextInfo?.stanzaId ||
+      payload.quotedMessage?.messageId;
+    
+    if (referenceMessageId) {
+      console.log('↩️ Resposta a mensagem:', referenceMessageId);
+    }
+
     // Z-API pode enviar diferentes formatos de payload
     // Extrair número e mensagem
     let phone = payload.phone || payload.from || payload.sender?.id;
@@ -509,6 +519,100 @@ serve(async (req) => {
         role: 'system',
         content: locaisTexto
       });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // BUSCAR CONTEXTO DA MENSAGEM CITADA (REPLY) - CRÍTICO!
+    // ═══════════════════════════════════════════════════════════
+    if (referenceMessageId) {
+      console.log('🔍 Buscando contexto da mensagem citada:', referenceMessageId);
+      
+      // 1. Tentar em lembretes_enviados (mensagens de lembrete)
+      const { data: lembrete } = await supabase
+        .from('lembretes_enviados')
+        .select('evento_id, tipo_lembrete')
+        .eq('zapi_message_id', referenceMessageId)
+        .maybeSingle();
+      
+      if (lembrete) {
+        // Buscar detalhes do evento
+        const { data: evento } = await supabase
+          .from('eventos')
+          .select('id, titulo, data, status')
+          .eq('id', lembrete.evento_id)
+          .maybeSingle();
+        
+        if (evento) {
+          console.log(`📌 Mensagem citada é lembrete do evento: ${evento.titulo}`);
+          
+          contexto.push({
+            role: 'system',
+            content: `[MENSAGEM CITADA - REPLY]
+O usuário está RESPONDENDO DIRETAMENTE a um lembrete sobre o evento:
+- ID: ${evento.id}
+- Título: "${evento.titulo}"
+- Status atual: ${evento.status || 'pendente'}
+- Tipo de lembrete: ${lembrete.tipo_lembrete}
+
+INTERPRETAÇÃO CRÍTICA:
+- Se responder "feito", "pronto", "ok", "sim" → Use marcar_status com busca="${evento.titulo}" e novo_status="concluido"
+- Se responder horário/data → Use editar_evento com busca="${evento.titulo}"
+- Se responder "não", "ainda não" → Responda oferecendo ajudar mais tarde`
+          });
+          
+          // Também adicionar como contexto estruturado
+          contexto.push({
+            mensagem_citada: true,
+            tipo: 'lembrete',
+            evento_id: evento.id,
+            evento_titulo: evento.titulo,
+            evento_status: evento.status
+          });
+        }
+      } else {
+        // 2. Tentar em conversas (mensagens da Malu)
+        const { data: conversa } = await supabase
+          .from('conversas')
+          .select('mensagem_malu, mensagem_usuario, contexto')
+          .eq('zapi_message_id', referenceMessageId)
+          .maybeSingle();
+        
+        if (conversa) {
+          console.log('📌 Mensagem citada é conversa anterior:', conversa.mensagem_malu?.substring(0, 50));
+          
+          // Verificar se tinha ação pendente
+          let acaoPendenteInfo = '';
+          if (conversa.contexto && Array.isArray(conversa.contexto)) {
+            const acaoPendente = conversa.contexto.find((c: any) => 
+              c.acao_pendente || c.evento_id || c.eventos
+            );
+            if (acaoPendente) {
+              acaoPendenteInfo = `\nAção pendente: ${JSON.stringify(acaoPendente)}`;
+            }
+          }
+          
+          contexto.push({
+            role: 'system',
+            content: `[MENSAGEM CITADA - REPLY]
+O usuário está RESPONDENDO DIRETAMENTE a esta mensagem da Malu:
+"${conversa.mensagem_malu}"${acaoPendenteInfo}
+
+INTERPRETAÇÃO CRÍTICA:
+- Trate a resposta como se fosse continuação DIRETA dessa mensagem
+- "sim", "feito", "ok" = confirmação do que foi perguntado
+- "não" = negação do que foi perguntado
+- Se continha pergunta sobre evento, ação refere-se a esse evento`
+          });
+          
+          contexto.push({
+            mensagem_citada: true,
+            tipo: 'conversa',
+            mensagem_original: conversa.mensagem_malu
+          });
+        } else {
+          console.log('⚠️ Mensagem citada não encontrada no banco');
+        }
+      }
     }
 
     // 2. Processar com a Malu (incluindo imageUrl se houver)
