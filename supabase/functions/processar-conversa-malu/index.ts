@@ -132,41 +132,82 @@ serve(async (req) => {
     }
     
     // Formatar contexto das últimas conversas (incluindo mensagens de sistema)
-    const contextoFormatado = contexto && contexto.length > 0
+    const contextoFormatado = contexto && contexto.length > 0 
       ? contexto.map((c: any) => {
-          // Mensagens de sistema
+          // 1. Mensagens de sistema
           if (c.role === 'system') {
             return `[SISTEMA]: ${c.content}`;
           }
-          
-          // ✅ PARTE 1: Formatar ações pendentes como texto legível
+
+          // 2. ✅ AÇÕES PENDENTES (CRÍTICO - FORMATAÇÃO COMPLETA!)
           if (c.acao_pendente) {
-            let texto = `[AÇÃO PENDENTE: ${c.acao_pendente}]`;
-            if (c.evento_id) texto += `\n  └─ Evento ID: ${c.evento_id}`;
-            if (c.evento_titulo) texto += `\n  └─ Título: "${c.evento_titulo}"`;
-            if (c.nova_hora) texto += `\n  └─ Nova hora: ${c.nova_hora}`;
-            if (c.nova_data) texto += `\n  └─ Nova data: ${c.nova_data}`;
-            if (c.novo_status) texto += `\n  └─ Novo status: ${c.novo_status}`;
+            let texto = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ AÇÃO PENDENTE: ${c.acao_pendente.toUpperCase()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+            if (c.evento_id) {
+              texto += `\n📌 Evento ID: ${c.evento_id}`;
+            }
+            if (c.evento_titulo) {
+              texto += `\n📋 Título: "${c.evento_titulo}"`;
+            }
+            if (c.nova_hora) {
+              texto += `\n🕐 Nova hora: ${c.nova_hora}`;
+            }
+            if (c.nova_data) {
+              texto += `\n📅 Nova data: ${c.nova_data}`;
+            }
+            if (c.novo_status) {
+              texto += `\n✅ Novo status: ${c.novo_status}`;
+            }
+            if (c.eventos_listados && Array.isArray(c.eventos_listados)) {
+              texto += `\n\n📋 Eventos para escolher:`;
+              c.eventos_listados.forEach((e: any) => {
+                texto += `\n   ${e.numero}. ${e.titulo}`;
+              });
+            }
+            if (c.eventos && Array.isArray(c.eventos)) {
+              texto += `\n\n📋 IDs dos eventos: ${c.eventos.join(', ')}`;
+            }
+
+            texto += `\n\n⚠️ IMPORTANTE: Se usuária confirmar (sim/ok/confirmo/feito) OU der número:\n→ Você DEVE executar esta ação usando confirmar_edicao, confirmar_cancelamento ou marcar_status!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
             return texto;
           }
-          
-          // ✅ PARTE 1: Formatar mensagem citada como texto legível
+
+          // 3. ✅ MENSAGENS CITADAS (REPLY) - FORMATAÇÃO COMPLETA!
           if (c.mensagem_citada) {
-            let texto = `[MENSAGEM CITADA - ${(c.tipo || 'REPLY').toUpperCase()}]`;
-            if (c.evento_titulo) texto += `\n  └─ Evento: "${c.evento_titulo}"`;
-            if (c.evento_id) texto += `\n  └─ Evento ID: ${c.evento_id}`;
-            if (c.evento_status) texto += `\n  └─ Status: ${c.evento_status}`;
+            let texto = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n↩️ RESPONDENDO A MENSAGEM CITADA\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+            texto += `\n📱 Tipo: ${c.tipo?.toUpperCase() || 'N/A'}`;
+
+            if (c.evento_titulo) {
+              texto += `\n📋 Evento: "${c.evento_titulo}"`;
+            }
+            if (c.evento_status) {
+              texto += `\n📊 Status atual: ${c.evento_status}`;
+            }
+            if (c.evento_id) {
+              texto += `\n📌 ID: ${c.evento_id}`;
+            }
+            if (c.evento_data) {
+              texto += `\n📅 Data: ${c.evento_data}`;
+            }
+
+            texto += `\n\n⚠️ IMPORTANTE: Se usuária responde "feito/ok/sim/pronto":\n→ Significa que completou ESTE evento específico!\n→ Use marcar_status com busca="${c.evento_titulo}" e novo_status="concluido"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
             return texto;
           }
-          
-          // Conversas normais
+
+          // 4. Conversas normais (usuário <-> Malu)
           if (c.usuario && c.malu) {
             return `Usuária: ${c.usuario}\nMalu: ${c.malu}`;
           }
-          
+
+          // 5. Fallback - retornar vazio para filtrar depois
           return '';
         }).filter(Boolean).join('\n\n')
       : 'Nenhuma conversa anterior';
+
+    console.log('[DEBUG] 📝 Contexto formatado (preview):', contextoFormatado.substring(0, 500) + '...');
     
     // Combinar contexto estruturado + histórico formatado
     const contextoCompleto = contextoEstruturado 
