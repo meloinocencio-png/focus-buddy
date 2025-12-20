@@ -219,15 +219,113 @@ export function getInicioHoje(): Date {
 
 // ═══════════════════════════════════════════════════════════
 // FUNÇÃO: Formatar hora em horário de Brasília (BRT = UTC-3)
+// ✅ CORRIGIDO: Usar Intl para garantir consistência
 // ═══════════════════════════════════════════════════════════
 export function formatarHoraBRT(date: Date): string {
-  const offsetBRT = -3 * 60; // -180 minutos
-  const utcTime = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
-  const brtTime = utcTime + (offsetBRT * 60 * 1000);
-  const dateBRT = new Date(brtTime);
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
   
-  const hora = dateBRT.getUTCHours().toString().padStart(2, '0');
-  const minuto = dateBRT.getUTCMinutes().toString().padStart(2, '0');
+  const hora = parts.find(p => p.type === 'hour')?.value || '00';
+  const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+  return `${hora}:${minuto}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO CENTRALIZADA: Formatar data/hora SEMPRE em Brasília
+// USO: formatarDataHoraBrasilia(new Date(evento.data))
+// RETORNA: "20/12 às 22:00" ou "Seg 20/12 às 22:00"
+// ═══════════════════════════════════════════════════════════
+export function formatarDataHoraBrasilia(
+  date: Date | string, 
+  opcoes?: {
+    comDiaSemana?: boolean;
+    comAno?: boolean;
+    formato?: 'completo' | 'curto' | 'hora-apenas';
+  }
+): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(d.getTime())) {
+    console.error('Data inválida:', date);
+    return 'Data inválida';
+  }
+  
+  const formato = opcoes?.formato || 'curto';
+  
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: opcoes?.comDiaSemana ? 'short' : undefined,
+    day: '2-digit',
+    month: '2-digit',
+    year: opcoes?.comAno ? 'numeric' : undefined,
+    hour: formato !== 'hora-apenas' ? '2-digit' : undefined,
+    minute: formato !== 'hora-apenas' ? '2-digit' : undefined,
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(d);
+  
+  const diaSemana = parts.find(p => p.type === 'weekday')?.value;
+  const dia = parts.find(p => p.type === 'day')?.value;
+  const mes = parts.find(p => p.type === 'month')?.value;
+  const ano = parts.find(p => p.type === 'year')?.value;
+  const hora = parts.find(p => p.type === 'hour')?.value;
+  const minuto = parts.find(p => p.type === 'minute')?.value;
+  
+  const diaSemanaCapitalizado = diaSemana 
+    ? diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1).replace('.', '')
+    : '';
+  
+  if (formato === 'hora-apenas') {
+    return `${hora}:${minuto}`;
+  }
+  
+  if (formato === 'completo') {
+    let resultado = '';
+    if (diaSemanaCapitalizado) resultado += `${diaSemanaCapitalizado} `;
+    resultado += `${dia}/${mes}`;
+    if (ano) resultado += `/${ano}`;
+    if (hora && minuto) resultado += ` às ${hora}:${minuto}`;
+    return resultado;
+  }
+  
+  let resultado = '';
+  if (diaSemanaCapitalizado) resultado += `${diaSemanaCapitalizado} `;
+  resultado += `${dia}/${mes}`;
+  if (hora && minuto) resultado += ` às ${hora}:${minuto}`;
+  return resultado;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNÇÃO: Extrair apenas a HORA em Brasília
+// USO: extrairHoraBrasilia(new Date(evento.data))
+// RETORNA: "22:00" ou "22h00"
+// ═══════════════════════════════════════════════════════════
+export function extrairHoraBrasilia(date: Date | string, formato?: 'HH:MM' | 'HHhMM'): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(d.getTime())) {
+    return '00:00';
+  }
+  
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+  
+  const hora = parts.find(p => p.type === 'hour')?.value || '00';
+  const minuto = parts.find(p => p.type === 'minute')?.value || '00';
+  
+  if (formato === 'HHhMM') {
+    return minuto === '00' ? `${hora}h` : `${hora}h${minuto}`;
+  }
+  
   return `${hora}:${minuto}`;
 }
 
