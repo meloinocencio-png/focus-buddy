@@ -143,8 +143,15 @@ serve(async (req) => {
       payload.contextInfo?.stanzaId ||
       payload.quotedMessage?.messageId;
     
+    // ✅ TAMBÉM EXTRAIR TEXTO DA MENSAGEM CITADA (vem do Z-API)
+    const textoMensagemCitada = payload.quotedMessage?.message || 
+      payload.contextInfo?.quotedMessage?.conversation ||
+      payload.quotedMsg?.message ||
+      null;
+    
     if (referenceMessageId) {
       console.log('↩️ Resposta a mensagem:', referenceMessageId);
+      console.log('↩️ Texto da mensagem citada:', textoMensagemCitada?.substring(0, 80) || 'NÃO DISPONÍVEL');
     }
 
     // Z-API pode enviar diferentes formatos de payload
@@ -442,6 +449,142 @@ serve(async (req) => {
         preview: c.acao_pendente || c.usuario?.substring(0, 30)
       }))
     });
+
+    // ═══════════════════════════════════════════════════════════
+    // PROCESSAR MENSAGEM CITADA (REPLY) - BUSCAR EVENTO REFERENCIADO
+    // ═══════════════════════════════════════════════════════════
+    if (referenceMessageId || textoMensagemCitada) {
+      console.log('[DEBUG] ↩️ Processando reply do WhatsApp...');
+      
+      let eventoEncontrado: any = null;
+      
+      // MÉTODO 1: Buscar pelo zapi_message_id na tabela lembretes_enviados
+      if (referenceMessageId) {
+        const { data: lembreteRef } = await supabase
+          .from('lembretes_enviados')
+          .select('evento_id, tipo_lembrete')
+          .eq('zapi_message_id', referenceMessageId)
+          .single();
+        
+        if (lembreteRef?.evento_id) {
+          console.log('[DEBUG] ✅ Encontrou lembrete referenciado:', lembreteRef.evento_id);
+          
+          // Buscar dados do evento
+          const { data: evt } = await supabase
+            .from('eventos')
+            .select('id, titulo, tipo, data, status')
+            .eq('id', lembreteRef.evento_id)
+            .single();
+          
+          if (evt) {
+            eventoEncontrado = evt;
+          }
+        }
+      }
+      
+      // MÉTODO 2: Se não encontrou por ID, buscar pelo texto da mensagem citada
+      if (!eventoEncontrado && textoMensagemCitada && textoMensagemCitada.length > 5) {
+        console.log('[DEBUG] 🔍 Buscando evento pelo texto da mensagem citada...');
+        
+        // Limpar texto para extrair palavras-chave
+        let textoLimpo = textoMensagemCitada
+          .replace(/[📅📋🛒💊🔔🎂⏰•✅❌🔁]/g, '')
+          .replace(/^\s*[-•]\s*/, '')
+          .replace(/^\d{1,2}:\d{2}\s*-\s*/, '')
+          .replace(/R\$\s*[\d.,]+/g, '')  // Remover valores monetários
+          .trim();
+        
+        // Se tem parênteses, pegar o que está antes
+        if (textoLimpo.includes('(')) {
+          textoLimpo = textoLimpo.split('(')[0].trim();
+        }
+        
+        // Extrair palavras significativas (>3 chars)
+        const palavrasChave = textoLimpo
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((p: string) => p.length > 3 && !['ainda', 'precisa', 'fazer', 'você', 'para', 'como', 'está'].includes(p));
+        
+        if (palavrasChave.length > 0) {
+          console.log('[DEBUG] 🔎 Palavras-chave extraídas:', palavrasChave.join(', '));
+          
+          // Buscar eventos do usuário
+          const { data: eventosUsuario } = await supabase
+            .from('eventos')
+            .select('id, titulo, tipo, data, status')
+            .eq('usuario_id', userId)
+            .or('status.is.null,status.eq.pendente')
+            .order('criado_em', { ascending: false })
+            .limit(20);
+          
+          if (eventosUsuario && eventosUsuario.length > 0) {
+            // Encontrar evento que contenha mais palavras-chave
+            let melhorMatch: any = null;
+            let melhorScore = 0;
+            
+            for (const evt of eventosUsuario) {
+              const tituloLower = evt.titulo.toLowerCase();
+              let score = 0;
+              
+              for (const palavra of palavrasChave) {
+                if (tituloLower.includes(palavra)) {
+                  score++;
+                }
+              }
+              
+              if (score > melhorScore) {
+                melhorScore = score;
+                melhorMatch = evt;
+              }
+            }
+            
+            if (melhorMatch && melhorScore > 0) {
+              eventoEncontrado = melhorMatch;
+              console.log('[DEBUG] ✅ Evento encontrado por texto:', {
+                titulo: melhorMatch.titulo,
+                score: melhorScore,
+                palavras_usadas: palavrasChave.length
+              });
+            }
+          }
+        }
+      }
+      
+      // Adicionar evento encontrado ao contexto como mensagem_citada
+      if (eventoEncontrado) {
+        // Formatar data em Brasília
+        const dataEvento = new Date(eventoEncontrado.data);
+        const partsData = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).formatToParts(dataEvento);
+        
+        const dataFormatada = `${partsData.find(p => p.type === 'day')?.value}/${partsData.find(p => p.type === 'month')?.value} às ${partsData.find(p => p.type === 'hour')?.value}:${partsData.find(p => p.type === 'minute')?.value}`;
+        
+        contexto.push({
+          mensagem_citada: true,
+          tipo: eventoEncontrado.tipo || 'tarefa',
+          evento_titulo: eventoEncontrado.titulo,
+          evento_id: eventoEncontrado.id,
+          evento_status: eventoEncontrado.status || 'pendente',
+          evento_data: dataFormatada,
+          texto_original: textoMensagemCitada,
+          mensagem_usuario: message
+        });
+        
+        console.log('[DEBUG] ✅ CONTEXTO DE REPLY ADICIONADO:', {
+          evento_titulo: eventoEncontrado.titulo,
+          evento_id: eventoEncontrado.id,
+          resposta_usuario: message
+        });
+      } else {
+        console.log('[DEBUG] ⚠️ Nenhum evento encontrado para a mensagem citada');
+      }
+    }
 
     // ═══════════════════════════════════════════════════════════
     // DETECTAR SE ÚLTIMA MENSAGEM DA MALU FOI PERGUNTA
