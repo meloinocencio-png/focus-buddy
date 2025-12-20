@@ -2,7 +2,7 @@
 // FUNÇÕES DE BUSCA E MANIPULAÇÃO DE EVENTOS
 // ═══════════════════════════════════════════════════════════
 
-import { getInicioHoje } from './utils.ts';
+import { getInicioHoje, formatarDataHoraBrasilia } from './utils.ts';
 
 export interface BuscaEventosResult {
   eventos: any[];
@@ -134,29 +134,14 @@ export function formatarListaEventos(eventos: any[], maxItens: number = 5): stri
   const limitado = eventos.slice(0, maxItens);
   
   return limitado.map((evt, i) => {
-    const d = new Date(evt.data);
     const emoji = tipoEmoji[evt.tipo] || '📌';
     
-    // ✅ CORRIGIDO: Usar Intl.DateTimeFormat com timezone Brasília
-    const parts = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).formatToParts(d);
+    // ✅ USAR FUNÇÃO CENTRALIZADA
+    const dataFormatada = formatarDataHoraBrasilia(evt.data, { 
+      comDiaSemana: true,
+      formato: 'completo'
+    });
     
-    const diaSemana = parts.find(p => p.type === 'weekday')?.value || 'Seg';
-    const dia = parts.find(p => p.type === 'day')?.value || '01';
-    const mes = parts.find(p => p.type === 'month')?.value || '01';
-    const hora = parts.find(p => p.type === 'hour')?.value || '00';
-    const minuto = parts.find(p => p.type === 'minute')?.value || '00';
-    
-    // Capitalizar primeira letra do dia da semana
-    const diaSemanaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1).replace('.', '');
-    
-    return `${i + 1}. ${emoji} *${evt.titulo}*\n   ${diaSemanaCapitalizado} ${dia}/${mes} às ${hora}:${minuto}`;
+    return `${i + 1}. ${emoji} *${evt.titulo}*\n   ${dataFormatada}`;
   }).join('\n\n');
 }
