@@ -400,16 +400,23 @@ serve(async (req) => {
 
           // Se encontrou ação pendente, adicionar ao contexto e PARAR
           if (acoesPendentes.length > 0) {
+            // ✅ PEGAR APENAS A PRIMEIRA AÇÃO (mais recente/relevante)
+            const acaoPrincipal = acoesPendentes[0];
+            
             console.log(`[DEBUG] 🔄 AÇÃO PENDENTE ENCONTRADA na conversa [${i}]!`, {
-              tipo: acoesPendentes[0].acao_pendente,
-              evento_id: acoesPendentes[0].evento_id,
-              conversa: conversa.mensagem_usuario?.substring(0, 40)
+              tipo: acaoPrincipal.acao_pendente,
+              evento_id: acaoPrincipal.evento_id,
+              conversa: conversa.mensagem_usuario?.substring(0, 40),
+              total_acoes_encontradas: acoesPendentes.length,
+              acoes_ignoradas: acoesPendentes.length - 1
             });
 
-            // Adicionar TODAS as ações pendentes ao contexto
-            acoesPendentes.forEach((ap: any) => {
-              contexto.push(ap);
-            });
+            // ✅ ADICIONAR APENAS A PRIMEIRA (não todas!)
+            contexto.push(acaoPrincipal);
+            
+            if (acoesPendentes.length > 1) {
+              console.log(`[DEBUG] ⚠️ Ignorando ${acoesPendentes.length - 1} ações pendentes antigas para evitar confusão`);
+            }
 
             // ✅ PARAR após encontrar - não buscar em conversas mais antigas
             acaoPendenteEncontrada = true;
@@ -844,6 +851,16 @@ serve(async (req) => {
             const statusTexto = acaoPendenteStatus.novo_status === 'concluido' ? 'concluído' : 'pendente';
             console.log(`✅ Status atualizado via escolha: ${eventoEscolhido?.titulo}`);
             respostaFinal = `${statusEmoji} *${eventoEscolhido?.titulo}* marcado como ${statusTexto}!`;
+            
+            // ✅ LIMPAR CONTEXTO após ação bem-sucedida
+            const { error: limparError } = await supabase
+              .from('conversas')
+              .update({ contexto: [] })
+              .eq('whatsapp_de', phone)
+              .gte('criada_em', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+            if (!limparError) {
+              console.log('[DEBUG] 🧹 Contexto limpo após marcar_status (escolha)');
+            }
           }
           
           // Enviar resposta
@@ -1650,6 +1667,16 @@ Relaxa, eu cuido! 😊`;
           } else {
             console.log('✅ Evento editado:', acaoPendente.evento_id);
             respostaFinal = '✅ Evento atualizado!';
+            
+            // ✅ LIMPAR CONTEXTO após ação bem-sucedida
+            const { error: limparError } = await supabase
+              .from('conversas')
+              .update({ contexto: [] })
+              .eq('whatsapp_de', phone)
+              .gte('criada_em', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+            if (!limparError) {
+              console.log('[DEBUG] 🧹 Contexto limpo após confirmar_edicao');
+            }
           }
         }
       }
@@ -1807,6 +1834,16 @@ Relaxa, eu cuido! 😊`;
         } else {
           console.log('✅ Evento cancelado:', acaoPendente.evento_id);
           respostaFinal = '✅ Evento cancelado!';
+          
+          // ✅ LIMPAR CONTEXTO após ação bem-sucedida
+          const { error: limparError } = await supabase
+            .from('conversas')
+            .update({ contexto: [] })
+            .eq('whatsapp_de', phone)
+            .gte('criada_em', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+          if (!limparError) {
+            console.log('[DEBUG] 🧹 Contexto limpo após confirmar_cancelamento');
+          }
         }
       }
     }
@@ -2128,6 +2165,16 @@ Relaxa, eu cuido! 😊`;
             
             console.log(`✅ Status atualizado: ${evento.titulo} → ${maluResponse.novo_status}`);
             respostaFinal = `${statusEmoji} *${evento.titulo}* marcado como ${statusTexto}!`;
+            
+            // ✅ LIMPAR CONTEXTO após ação bem-sucedida
+            const { error: limparError } = await supabase
+              .from('conversas')
+              .update({ contexto: [] })
+              .eq('whatsapp_de', phone)
+              .gte('criada_em', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+            if (!limparError) {
+              console.log('[DEBUG] 🧹 Contexto limpo após marcar_status');
+            }
           }
           
         } else {
