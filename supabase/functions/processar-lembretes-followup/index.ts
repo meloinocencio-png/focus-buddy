@@ -137,6 +137,21 @@ serve(async (req) => {
         );
         
         if (zapiResponse.ok) {
+          // ✅ NOVO: Extrair messageId da resposta Z-API
+          const zapiData = await zapiResponse.json();
+          const messageId = zapiData.messageId || zapiData.id || zapiData.message?.id;
+          
+          console.log(`📤 Follow-up enviado. Z-API messageId: ${messageId}`);
+          
+          // ✅ NOVO: Salvar na tabela lembretes_enviados para rastrear replies
+          await supabase.from('lembretes_enviados').insert({
+            evento_id: evento.id,
+            usuario_id: followup.usuario_id,
+            tipo_lembrete: 'followup',
+            zapi_message_id: messageId,
+            status: 'enviado'
+          });
+          
           // Calcular próximo intervalo usando função compartilhada
           const novoIntervalo = calcularProximoIntervaloSimples(followup.tentativas);
           const proximaPergunta = new Date();
