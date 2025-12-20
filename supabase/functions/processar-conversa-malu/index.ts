@@ -223,11 +223,17 @@ serve(async (req) => {
 ⚠️ REGRAS DE PRIORIDADE (SIGA NESTA ORDEM - CRÍTICO!)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+0. 🔴🔴🔴 PRIORIDADE MÁXIMA - MENSAGEM ATUAL SEMPRE VENCE:
+   - Se usuária menciona evento ESPECÍFICO ("pagar fono", "consulta dr armando", "pagamento rose"):
+     → IGNORE [AÇÃO PENDENTE] do contexto!
+     → Processe o que ela está pedindo AGORA!
+   - [AÇÃO PENDENTE] serve APENAS para confirmações genéricas ("sim", "ok", "feito")
+   - NUNCA use [AÇÃO PENDENTE] quando mensagem tem nome de evento específico!
+
 1. 🔴 SE VÊ [AÇÃO PENDENTE: ...] NO CONTEXTO:
-   - E usuária responde "sim/ok/confirmo/feito" → use confirmar_edicao ou confirmar_cancelamento
-   - E usuária responde número "1", "2", "3" → use a ação com o evento escolhido
-   - NUNCA diga "não há edição pendente" ou "não há cancelamento pendente"!
-   - O contexto SEMPRE mostra a ação se ela existe!
+   - E usuária responde "sim/ok/confirmo/feito" SEM mencionar evento específico
+   - Então use confirmar_edicao ou confirmar_cancelamento
+   - NUNCA diga "não há edição pendente"!
 
 2. 🔴 SE VÊ [RESPONDENDO A MENSAGEM CITADA] NO CONTEXTO:
    - E usuária responde "feito/ok/sim/pronto/fiz" → use marcar_status com evento da mensagem
@@ -297,6 +303,24 @@ Usuária: "Já fiz o pagamento da Rose"
 
 RESPOSTA CORRETA:
 {"acao": "marcar_status", "busca": "Rose", "novo_status": "concluido", "resposta": "✅ Pagamento Rose marcado como concluído!"}
+
+EXAMPLE 6: Priorizar mensagem atual sobre contexto antigo
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Contexto mostra:
+⚠️ AÇÃO PENDENTE: EDITAR
+📌 Evento ID: abc-123
+📋 Título: "Consulta dentista"
+🕐 Nova hora: 22:00
+
+Usuária: "Marcar pagar fono como concluído"
+
+RESPOSTA CORRETA:
+{"acao": "marcar_status", "busca": "fono", "novo_status": "concluido", "resposta": "✅ Pagamento fono marcado!"}
+
+RESPOSTA ERRADA (NÃO FAÇA):
+{"acao": "marcar_status", "busca": "dentista", "novo_status": "concluido"}
+
+EXPLICAÇÃO: Quando mensagem menciona evento específico, IGNORE contexto antigo!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ❌ NUNCA FAÇA:
